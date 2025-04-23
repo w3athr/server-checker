@@ -3,82 +3,128 @@ package main
 import (
 	"fmt"
 	"os"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/shirou/gopsutil/v3/cpu"
-	"github.com/shirou/gopsutil/v3/mem"
+)
+
+const (
+	stateSelectEquip   = "selectEquip"
+	stateSelectProduct = "selectProduct"
+	stateMainMenu      = "mainMenu"
 )
 
 type model struct {
-	cpuUsage float64
-	memUsed  uint64
-	memTotal uint64
-	err      error
+	state         string
+	equipOptions  []string
+	equipIndex    int
+	equipmentType string
+	
+	productOptions []string
+	productIndex   int
+	productType    string
 }
 
-type metricsMsg struct {
-	cpu float64
-	mem *mem.VirtualMemoryStat
-	err error
+func initialModel() model {
+	return model{
+		state:        stateSelectEquip,
+		equipOptions: []string{"рубеж-с", "рубеж-т", "рубеж-н", "бокс", "тринити", "супермикро"},
+		equipIndex:   0,
+
+		productOptions: []string{"ngfw", "ifw"},
+		productIndex:   0,
+	}
 }
 
 func (m model) Init() tea.Cmd {
 	return nil
 }
 
-func fetchMetrics() tea.Msg {
-	cpuPercent, err1 := cpu.Percent(time.Second, false)
-	memStats, err2 := mem.VirtualMemory()
-
-	if err1 != nil || err2 != nil {
-		return metricsMsg{err: fmt.Errorf("ошибка: %v %v", err1, err2)}
-	}
-
-	return metricsMsg{
-		cpu: cpuPercent[0],
-		mem: memStats,
-	}
-}
-
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	
-	case metricsMsg:
-		if msg.err != nil {
-			m.err = msg.err
-			return m, nil
-		}
-		m.cpuUsage = msg.cpu
-		m.memUsed = msg.mem.Used / (1024 * 1024)
-		m.memTotal = msg.mem.Total / (1024 * 1024)
-		return m, tea.Tick(time.Second*2, func(time.Time) tea.Msg {
-			return fetchMetrics()
-		})
-
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "ctrl+c", "q":
+	if key, ok := msg.(tea.KeyMsg); ok {
+		if key.String() == "q" || key.String() == "ctrl+c" {
 			return m, tea.Quit
 		}
+	}
+
+	switch m.state {
+
+	case stateSelectEquip:
+		if key, ok := msg.(tea.KeyMsg); ok {
+			switch key.String() {
+			case "up", "k":
+				if m.equipIndex > 0 {
+					m.equipIndex--
+				}
+			case "down", "j":
+				if m.equipIndex < len(m.equipOptions)-1 {
+					m.equipIndex++
+				}
+			case "enter":
+				m.equipmentType = m.equipOptions[m.equipIndex]
+				m.state = stateSelectProduct
+			}
+		}
+	
+	case stateSelectProduct:
+		if key, ok := msg.(tea.KeyMsg); ok {
+			switch key.String() {
+			case "up", "k":
+				if m.productIndex > 0 {
+					m.productIndex--
+				}
+			case "down", "j":
+				if m.productIndex < len(m.productOptions)-1 {
+					m.productIndex++
+				}
+			case "enter":
+				m.productType = m.productOptions[m.productIndex]
+				m.state = stateMainMenu
+			}
+		}
+	case stateMainMenu:
+	
 	}
 	return m, nil
 }
 
 func (m model) View() string {
-	if m.err != nil {
-		return fmt.Sprintf("Произошла ошибка: %v\nНажми q для выхода", m.err)
-	}
+	switch m.state {
+	case stateSelectEquip:
+		s := "1) Выберите модель оборудования:\n\n"
+		for i, opt := range m.equipOptions {
+			cursor := " "
+			if i == m.equipIndex {
+				cursor = "> "
+			}
+			s += fmt.Sprintf("%s%s\n", cursor, opt)
+		}
+		s += "\n ↑/↓ (k/j) - навигация, Enter — подтвердить, q - выход.\n"
+		return s
 
-	return fmt.Sprintf(
-		"Мониторинг сервера\n\nCPU загрузка: %.2f%%\nRAM: %d МБ\nТотал: %d\n\nНажми q для выхода.",
-		m.cpuUsage, m.memUsed, m.memTotal,
-	)
+	case stateSelectProduct:
+		s := fmt.Sprintf("Вы выбрали оборудование: %s\n\n", m.equipmentType)
+		s += "2) Выберите продукт:\n\n"
+		for i, opt := range m.productOptions {
+			cursor := " "
+			if i == m.productIndex {
+				cursor = "> "
+			}
+			s += fmt.Sprintf("%s%s\n", cursor, opt)
+		}
+		s += "\n ↑/↓ (k/j) - навигация, Enter — подтвердить, q - выход.\n" 
+		return s
+		
+	case stateMainMenu:
+		return fmt.Sprintf(
+			"Оборудование: %s\nПродукт: %s\n\n3) Главное меню (здесь будут пункты 1-4)\n\nq - выход\n", 
+			m.equipmentType, m.productType,
+		)
+	}
+	return "Неизвестное состояние\n"
 }
 
 func main() {
-	p := tea.NewProgram(model{})
-
+	p := tea.NewProgram(initialModel())
 	if err := p.Start(); err != nil {
 		fmt.Println("Ошибка запуска:", err)
 		os.Exit(1)
