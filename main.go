@@ -11,6 +11,11 @@ const (
 	stateSelectEquip   = "selectEquip"
 	stateSelectProduct = "selectProduct"
 	stateMainMenu      = "mainMenu"
+
+	stateShowConfig = "showConfig"
+	stateTestLEDs   = "testLEDs"
+	stateShowLoad   = "showLoad"
+	stateFillReport = "fillReport"
 )
 
 type model struct {
@@ -22,6 +27,9 @@ type model struct {
 	productOptions []string
 	productIndex   int
 	productType    string
+
+	menuOptions []string
+	menuIndex   int
 }
 
 func initialModel() model {
@@ -32,6 +40,14 @@ func initialModel() model {
 
 		productOptions: []string{"ngfw", "ifw"},
 		productIndex:   0,
+
+		menuOptions: []string{
+			"Показать конфигурацию оборудования",
+			"Тест LED интерфейсов",
+			"Показать нагрузку CPU/RAM",
+			"Заполнить отчет",
+		},
+		menuIndex: 0,
 	}
 }
 
@@ -42,7 +58,15 @@ func (m model) Init() tea.Cmd {
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if key, ok := msg.(tea.KeyMsg); ok {
 		if key.String() == "q" || key.String() == "ctrl+c" {
-			return m, tea.Quit
+			switch m.state {
+			case stateSelectEquip, stateSelectProduct:
+				return m, tea.Quit
+			case stateMainMenu:
+				return m, tea.Quit
+			default:
+				m.state = stateMainMenu
+				return m, nil
+			}
 		}
 	}
 
@@ -82,7 +106,37 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case stateMainMenu:
-	
+		if key, ok := msg.(tea.KeyMsg); ok {
+			switch key.String() {
+			case "up", "k":
+				if m.menuIndex > 0 {
+					m.menuIndex--
+				}
+			case "down", "j":
+				if m.menuIndex < len(m.menuOptions)-1 {
+					m.menuIndex++
+				}
+			case "enter":
+				switch m.menuIndex {
+				case 0:
+					m.state = stateShowConfig
+				case 1:
+					m.state = stateTestLEDs
+				case 2:
+					m.state = stateShowLoad
+				case 3:
+					m.state = stateFillReport
+				}
+			}
+		}
+	case stateShowConfig:
+
+	case stateTestLEDs:
+
+	case stateShowLoad:
+
+	case stateFillReport:
+
 	}
 	return m, nil
 }
@@ -102,7 +156,7 @@ func (m model) View() string {
 		return s
 
 	case stateSelectProduct:
-		s := fmt.Sprintf("Вы выбрали оборудование: %s\n\n", m.equipmentType)
+		s := fmt.Sprintf("Оборудование: %s\n\n", m.equipmentType)
 		s += "2) Выберите продукт:\n\n"
 		for i, opt := range m.productOptions {
 			cursor := " "
@@ -115,12 +169,31 @@ func (m model) View() string {
 		return s
 		
 	case stateMainMenu:
-		return fmt.Sprintf(
-			"Оборудование: %s\nПродукт: %s\n\n3) Главное меню (здесь будут пункты 1-4)\n\nq - выход\n", 
-			m.equipmentType, m.productType,
-		)
-	}
-	return "Неизвестное состояние\n"
+		s := fmt.Sprintf("Оборудование: %s\nПродукт: %s\n\n", m.equipmentType, m.productType)
+		s += "Главное меню:\n\n"
+		for i, opt := range m.menuOptions {
+			cursor := " "
+			if i == m.menuIndex {
+				cursor = "> "
+			}
+			s += fmt.Sprintf("%s%s\n", cursor, opt)
+		}
+		s += "\n↑/↓ — навигация; Enter — выбрать; q — выход\n"
+		return s
+	
+	case stateShowConfig:
+		return "\n<<< CONFIG: placeholder >>>\n\nq — назад\n"
+
+	case stateTestLEDs:
+		return "\n<<< CONFIG: placeholder >>>\n\nq — назад\n"
+
+	case stateShowLoad:
+		return "\n<<< CONFIG: placeholder >>>\n\nq — назад\n"
+
+	case stateFillReport:
+		return "\n<<< CONFIG: placeholder >>>\n\nq — назад\n"
+		}
+	return "Unknown state\n"
 }
 
 func main() {
