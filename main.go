@@ -5,6 +5,7 @@ import (
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/w3athr/server-checker/internal/collector"
 )
 
 const (
@@ -18,18 +19,26 @@ const (
 	stateFillReport = "fillReport"
 )
 
+type configMsg struct {
+	lines []string
+}
+
 type model struct {
-	state         string
+	state string
+
 	equipOptions  []string
 	equipIndex    int
 	equipmentType string
-	
+
 	productOptions []string
 	productIndex   int
 	productType    string
 
 	menuOptions []string
 	menuIndex   int
+
+	configLines  []string
+	SystemConfig *collector.SystemConfig
 }
 
 func initialModel() model {
@@ -56,17 +65,31 @@ func (m model) Init() tea.Cmd {
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if key, ok := msg.(tea.KeyMsg); ok {
-		if key.String() == "q" || key.String() == "ctrl+c" {
-			switch m.state {
-			case stateSelectEquip, stateSelectProduct:
-				return m, tea.Quit
-			case stateMainMenu:
-				return m, tea.Quit
-			default:
-				m.state = stateMainMenu
-				return m, nil
-			}
+	if cfg, ok := msg.(configMsg); ok {
+		m.configLines = cfg.lines
+		return m, nil
+	}
+
+	if key, ok := msg.(tea.KeyMsg); ok && (key.String() == "q" || key.String() == "ctrl+c") {
+		switch m.state {
+		case stateSelectEquip:
+			return m, tea.Quit
+
+		case stateSelectProduct:
+			m.state = stateSelectEquip
+			return m, nil
+
+		case stateMainMenu:
+			m.state = stateSelectProduct
+			return m, nil
+
+		case stateShowConfig:
+			m.state = stateMainMenu
+			return m, nil
+
+		case stateTestLEDs, stateShowLoad, stateFillReport:
+			m.state = stateMainMenu
+			return m, nil
 		}
 	}
 
@@ -88,7 +111,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.state = stateSelectProduct
 			}
 		}
-	
+
 	case stateSelectProduct:
 		if key, ok := msg.(tea.KeyMsg); ok {
 			switch key.String() {
@@ -105,6 +128,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.state = stateMainMenu
 			}
 		}
+
 	case stateMainMenu:
 		if key, ok := msg.(tea.KeyMsg); ok {
 			switch key.String() {
@@ -119,7 +143,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "enter":
 				switch m.menuIndex {
 				case 0:
+					// переключаемся в режим показа конфигурации
 					m.state = stateShowConfig
+					// запускаем Collector и ждём configMsg
+					return m, func() tea.Msg {
+						cfg, err := collector.CollectConfig()
+						if err != nil {
+							return configMsg{lines: []string{fmt.Sprintf("Error: %v", err)}}
+						}
+						return configMsg{lines: collector.FormatConfigLines(cfg)}
+					}
 				case 1:
 					m.state = stateTestLEDs
 				case 2:
@@ -129,7 +162,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
+
 	case stateShowConfig:
+		// ничего не делаем — данные уже в m.configLines
 
 	case stateTestLEDs:
 
@@ -165,12 +200,12 @@ func (m model) View() string {
 			}
 			s += fmt.Sprintf("%s%s\n", cursor, opt)
 		}
-		s += "\n ↑/↓ (k/j) - навигация, Enter — подтвердить, q - выход.\n" 
+		s += "\n ↑/↓ (k/j) - навигация, Enter — подтвердить, q - назад.\n"
 		return s
-		
+
 	case stateMainMenu:
 		s := fmt.Sprintf("Оборудование: %s\nПродукт: %s\n\n", m.equipmentType, m.productType)
-		s += "Главное меню:\n\n"
+		s += "3) Главное меню:\n\n"
 		for i, opt := range m.menuOptions {
 			cursor := " "
 			if i == m.menuIndex {
@@ -178,11 +213,16 @@ func (m model) View() string {
 			}
 			s += fmt.Sprintf("%s%s\n", cursor, opt)
 		}
-		s += "\n↑/↓ — навигация; Enter — выбрать; q — выход\n"
+		s += "\n↑/↓ — навигация; Enter — выбрать; q — назад\n"
 		return s
-	
+
 	case stateShowConfig:
-		return "\n<<< CONFIG: placeholder >>>\n\nq — назад\n"
+		s := fmt.Sprintf("Оборудование: %s\nПродукт: %s\n\n", m.equipmentType, m.productType)
+		s += "4) Показать конфигурацию:\n\n"
+		for _, line := range m.configLines {
+			s += line + "\n"
+		}
+		return s
 
 	case stateTestLEDs:
 		return "\n<<< CONFIG: placeholder >>>\n\nq — назад\n"
@@ -192,12 +232,15 @@ func (m model) View() string {
 
 	case stateFillReport:
 		return "\n<<< CONFIG: placeholder >>>\n\nq — назад\n"
-		}
+	}
 	return "Unknown state\n"
 }
 
 func main() {
-	p := tea.NewProgram(initialModel())
+	p := tea.NewProgram(
+		initialModel(),
+		tea.WithAltScreen(),
+	)
 	if err := p.Start(); err != nil {
 		fmt.Println("Ошибка запуска:", err)
 		os.Exit(1)
