@@ -60,9 +60,7 @@ func CollectConfig() (*SystemConfig, error) {
 		return nil, fmt.Errorf("failed to list interfaces: %w", err)
 	}
 	for _, iface := range ifaces {
-		if iface.HardwareAddr.String() != "" {
-			sysCfg.NetworkAdapters = append(sysCfg.NetworkAdapters, iface.Name)
-		}
+		sysCfg.NetworkAdapters = append(sysCfg.NetworkAdapters, iface.Name)
 	}
 	return sysCfg, nil
 }

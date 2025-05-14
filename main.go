@@ -157,6 +157,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.state = stateTestLEDs
 				case 2:
 					m.state = stateShowLoad
+					return m, func() tea.Msg {
+						met, err := collector.GetMetrics(1 * time.Second)
+						if err != nil {
+							return metricsMsg{err: err}
+						}
+						return metricsMsg{
+							cpu:      met.CPUPercent,
+							memUsed:  met.MemUsedMB,
+							memTotal: met.MemTotalMB,
+						}
+					}
 				case 3:
 					m.state = stateFillReport
 				}
