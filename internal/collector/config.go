@@ -2,7 +2,7 @@ package collector
 
 import (
 	"fmt"
-
+	"net"
 	"github.com/jaypipes/ghw"
 )
 
@@ -55,14 +55,15 @@ func CollectConfig() (*SystemConfig, error) {
 	sysCfg.TotalDiskGB = totalDiskBytes / 1024 / 1024 / 1024
 
 	// Сетевые адаптеры
-	netInfo, err := ghw.Network()
+	ifaces, err := net.Interfaces()
 	if err != nil {
-		return nil, fmt.Errorf("network: %w", err)
+		return nil, fmt.Errorf("failed to list interfaces: %w", err)
 	}
-	for _, nic := range netInfo.NICs {
-		sysCfg.NetworkAdapters = append(sysCfg.NetworkAdapters, nic.Name)
+	for _, iface := range ifaces {
+		if iface.HardwareAddr.String() != "" {
+			sysCfg.NetworkAdapters = append(sysCfg.NetworkAdapters, iface.Name)
+		}
 	}
-
 	return sysCfg, nil
 }
 
