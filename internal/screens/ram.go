@@ -40,17 +40,17 @@ func (r ramScreen) View() string {
 	s.WriteString("RAM Information" + "\n\n")
 
 	// Общая информация (общий, занято, свободно)
-	totalGB := float64(r.data.RAM.Total) / gb
-	usedGB := float64(r.data.RAM.Used) / gb
-	freeGB := float64(r.data.RAM.Free) / gb
+	totalGB := formatBytes(r.data.RAM.Total)
+	usedGB := formatBytes(r.data.RAM.Used)
+	freeGB := formatBytes(r.data.RAM.Free)
 
-	s.WriteString(fmt.Sprintf("Total: %.2f GB\n", totalGB))
-	s.WriteString(fmt.Sprintf("Used: %.2f GB (%.1f%%)\n", usedGB, r.data.RAM.UsedPercent))
-	s.WriteString(fmt.Sprintf("Free: %.2f GB\n", freeGB))
+	fmt.Fprintf(&s, "Total: %.2f GB\n", totalGB)
+	fmt.Fprintf(&s, "Used: %.2f GB (%.1f%%)\n", usedGB, r.data.RAM.UsedPercent)
+	fmt.Fprintf(&s, "Free: %.2f GB\n", freeGB)
 
 	// прогресс-бар использования RAM
 	s.WriteString("Current Usage:\n")
-	s.WriteString(renderProgressBar(r.data.RAM.UsedPercent) + "\n\n")
+	s.WriteString(renderProgressBar(r.data.RAM.UsedPercent, 30) + "\n\n")
 
 	// список физ планок
 	s.WriteString("Physical Memory Sticks:\n")

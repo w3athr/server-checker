@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 type cpuScreen struct {
@@ -44,7 +43,7 @@ func (c cpuScreen) View() string {
 	s.WriteString(fmt.Sprintf("%s %.2f GHz\n", "Speed:", c.data.CPU.Speed))
 
 	load := c.data.CPU.LoadPercent // простой прогресс-бар для загрузки
-	bar := renderProgressBar(load)
+	bar := renderProgressBar(load, 30)
 
 	s.WriteString("\n" + "Current Load: " + fmt.Sprintf("%.2f%%", load) + "\n")
 	s.WriteString(bar + "\n\n")
@@ -52,26 +51,4 @@ func (c cpuScreen) View() string {
 	s.WriteString("Press ESC to return to menu.")
 
 	return s.String()
-}
-
-func renderProgressBar(percent float64) string { // функция отрисовки прогресс-бара
-	width := 30
-	filled := int(float64(width) * (percent / 100))
-	if filled < 0 {
-		filled = 0
-	}
-	if filled > width {
-		filled = width
-	}
-
-	bar := strings.Repeat("█", filled) + strings.Repeat("░", width-filled)
-
-	color := "#00FF00"
-	if percent > 80 {
-		color = "#FF0000"
-	} else if percent > 50 {
-		color = "#FFFF00"
-	}
-
-	return lipgloss.NewStyle().Foreground(lipgloss.Color(color)).Render(bar)
 }

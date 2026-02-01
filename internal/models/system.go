@@ -32,13 +32,16 @@ type RAMInfo struct {
 }
 
 type DiskInfo struct {
-	Device      string
-	Mountpoint  string
+	Device      string // логическое имя устройства, пр. "/dev/sda1"
+	Mountpoint  string // точка монтирования, пр. "/"
 	Total       uint64
 	Used        uint64
 	Free        uint64
 	UsedPercent float64
-	Model       string // потребует доп. вызов
+	Model       string  // модель физического диска
+	Type        string  // тип диска HDD/SSD/NVMe
+	Wear        float64 // износ в процентах
+	Status      string  // состояние диска (OK, Warning, Critical)
 }
 
 type NetworkInfo struct {
