@@ -5,11 +5,15 @@ import (
 	"server-checker/internal/models"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 type ramScreen struct {
-	data models.SystemInfo
+	data     models.SystemInfo
+	viewport viewport.Model
+	ready    bool
+	lastSize tea.WindowSizeMsg
 }
 
 func NewRAMScreen() ramScreen {
@@ -21,32 +25,38 @@ func (r ramScreen) Init() tea.Cmd {
 }
 
 func (r ramScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		r.lastSize = msg
+		headerHeight, footerHeight := 3, 2
+		if !r.ready {
+			r.viewport = viewport.New(msg.Width, msg.Height-headerHeight-footerHeight)
+			r.ready = true
+		} else {
+			r.viewport.Width = msg.Width
+			r.viewport.Height = msg.Height - headerHeight - footerHeight
+		}
+
 	case TickMsg:
 		r.data = models.SystemInfo(msg)
+		r.viewport.SetContent(r.renderContent())
 	}
-	return r, nil
+
+	r.viewport, cmd = r.viewport.Update(msg)
+	return r, cmd
 }
 
-func (r ramScreen) View() string {
+func (r ramScreen) renderContent() string {
 	if r.data.RAM.Total == 0 { // если данные еще не пришли
 		return "Loading RAM data...\n\nPress ESC to return to menu."
 	}
 
 	var s strings.Builder
 
-	const gb = 1024 * 1024 * 1024 // для перевода байтов в гигабайты
-
-	s.WriteString("RAM Information" + "\n\n")
-
-	// Общая информация (общий, занято, свободно)
-	totalGB := formatBytes(r.data.RAM.Total)
-	usedGB := formatBytes(r.data.RAM.Used)
-	freeGB := formatBytes(r.data.RAM.Free)
-
-	fmt.Fprintf(&s, "Total: %.2f GB\n", totalGB)
-	fmt.Fprintf(&s, "Used: %.2f GB (%.1f%%)\n", usedGB, r.data.RAM.UsedPercent)
-	fmt.Fprintf(&s, "Free: %.2f GB\n", freeGB)
+	fmt.Fprintf(&s, "Total: %s\n", formatBytes(r.data.RAM.Total))
+	fmt.Fprintf(&s, "Used: %s (%.1f%%)\n", formatBytes(r.data.RAM.Used), r.data.RAM.UsedPercent)
+	fmt.Fprintf(&s, "Available: %s\n", formatBytes(r.data.RAM.Available))
 
 	// прогресс-бар использования RAM
 	s.WriteString("Current Usage:\n")
@@ -54,14 +64,20 @@ func (r ramScreen) View() string {
 
 	// список физ планок
 	s.WriteString("Physical Memory Sticks:\n")
-	if len(r.data.RAM.Sticks) == 0 {
-		s.WriteString("No data available (commonly in VMs/WSL)\n")
-	} else {
-		for i, stick := range r.data.RAM.Sticks {
-			stickGB := float64(stick.Capacity) / gb
-			s.WriteString(fmt.Sprintf("[%d] Slot: %s | Capacity: %.2f GB | Vendor: %s | Speed: %d Mhz\n", i, stick.Slot, stickGB, stick.Model, stick.Speed))
-		}
+	for _, stick := range r.data.RAM.Sticks {
+		s.WriteString(fmt.Sprintf("%s | %s | %d Mhz\n",
+			stick.Slot, formatBytes(stick.Capacity), stick.Speed))
+		s.WriteString("  Model: " + stick.Model + "\n")
 	}
-	s.WriteString("\nPress ESC to return to menu.")
 	return s.String()
+}
+
+func (r ramScreen) View() string {
+	if !r.ready {
+		return "Initializing RAM..."
+	}
+	return fmt.Sprintf("%s\n%s\n%s",
+		"RAM information\n",
+		r.viewport.View(),
+		"\n(↑/↓)/(k/j): Scroll | ESC: Menu")
 }

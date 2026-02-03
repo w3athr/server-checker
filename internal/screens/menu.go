@@ -7,8 +7,10 @@ import (
 )
 
 type menu struct {
-	cursor int
-	items  []menuItem
+	cursor     int
+	items      []menuItem
+	lastWidth  int
+	lastHeight int
 }
 
 type menuItem struct {
@@ -35,6 +37,11 @@ func (m menu) Init() tea.Cmd {
 func (m menu) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 
+	case tea.WindowSizeMsg:
+		m.lastWidth = msg.Width
+		m.lastHeight = msg.Height
+		return m, nil
+
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "up", "k":
@@ -46,7 +53,10 @@ func (m menu) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cursor++
 			}
 		case "enter":
-			return m.items[m.cursor].onPress(), nil
+			newModel := m.items[m.cursor].onPress()
+			return newModel, func() tea.Msg {
+				return tea.WindowSizeMsg{Width: m.lastWidth, Height: m.lastHeight}
+			}
 		}
 	}
 	return m, nil
@@ -63,7 +73,7 @@ func (m menu) View() string {
 		s += fmt.Sprintf("%s %s\n", cursor, item.text)
 	}
 
-	s += "\nPress q to quit.\n"
+	s += "\n(↑/↓)/(k/j): Select | Q: Exit\n"
 
 	return s
 }

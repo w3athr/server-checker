@@ -48,7 +48,7 @@ func (c cpuScreen) View() string {
 	s.WriteString("\n" + "Current Load: " + fmt.Sprintf("%.2f%%", load) + "\n")
 	s.WriteString(bar + "\n\n")
 
-	s.WriteString("Press ESC to return to menu.")
+	s.WriteString("\n" + "ESC: Menu")
 
 	return s.String()
 }

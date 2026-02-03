@@ -39,6 +39,8 @@ func CollectAll() (models.SystemInfo, error) {
 	currentInfo.RAM = updateRAMDynamic(currentInfo.RAM)
 	// динамические данные дисков (занято, свободно)
 	currentInfo.Disks = collectDisks()
+	// динамические данные сети (статусы, ip)
+	currentInfo.Network = collectNetwork()
 	// время работы системы
 	u, _ := host.Uptime()
 	currentInfo.Host.Uptime = u

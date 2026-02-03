@@ -11,7 +11,7 @@ func updateRAMDynamic(info models.RAMInfo) models.RAMInfo {
 
 	info.Total = v.Total
 	info.Used = v.Used
-	info.Free = v.Free
+	info.Available = v.Available
 	info.UsedPercent = v.UsedPercent
 
 	return info

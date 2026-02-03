@@ -44,8 +44,10 @@ func getPhysicalDriveData() map[string]models.DiskInfo {
 				if data, err := sm.ReadSMART(); err == nil {
 					info.Wear = float64(data.PercentUsed)
 					info.Status = "OK"
-					if info.Wear > 80 {
+					if info.Wear > 50 {
 						info.Status = "Warning"
+					} else if info.Wear > 80 {
+						info.Status = "Critical"
 					}
 				}
 				sm.Close()

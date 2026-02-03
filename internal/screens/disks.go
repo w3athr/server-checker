@@ -5,11 +5,14 @@ import (
 	"server-checker/internal/models"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 type disksScreen struct {
-	data models.SystemInfo
+	data     models.SystemInfo
+	viewport viewport.Model
+	ready    bool
 }
 
 func NewDisksScreen() disksScreen {
@@ -21,20 +24,45 @@ func (d disksScreen) Init() tea.Cmd {
 }
 
 func (d disksScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		headerHeight := 3
+		footerHeight := 2
+
+		if !d.ready {
+			d.viewport = viewport.New(msg.Width, msg.Height-headerHeight-footerHeight)
+			d.ready = true
+		} else {
+			d.viewport.Width = msg.Width
+			d.viewport.Height = msg.Height - headerHeight - footerHeight
+		}
+
 	case TickMsg:
 		d.data = models.SystemInfo(msg)
+		d.viewport.SetContent(d.renderContent())
 	}
-	return d, nil
+
+	d.viewport, cmd = d.viewport.Update(msg)
+	return d, cmd
 }
 
 func (d disksScreen) View() string {
+	if !d.ready {
+		return "Initializing Disks..."
+	}
+	return fmt.Sprintf("%s\n%s\n%s",
+		"Disks information\n",
+		d.viewport.View(),
+		"\n(↑/↓)/(k/j): Scroll | ESC: Menu")
+}
+
+func (d disksScreen) renderContent() string {
 	if len(d.data.Disks) == 0 {
 		return "Loading Disks data...\n\nPress ESC to return to menu."
 	}
 
 	var s strings.Builder
-	s.WriteString("STORAGE INFORMATION" + "\n\n")
 
 	for _, disk := range d.data.Disks {
 		// Заголовок: Путь и Точка монтирования
@@ -46,7 +74,7 @@ func (d disksScreen) View() string {
 		s.WriteString(modelInfo + "\n")
 
 		// Прогресс-бар использования места
-		usageLine := fmt.Sprintf("  Usage: %f / %f (%.1f%%)",
+		usageLine := fmt.Sprintf("  Usage: %s / %s (%.1f%%)",
 			formatBytes(disk.Used),
 			formatBytes(disk.Total),
 			disk.UsedPercent)
@@ -72,6 +100,5 @@ func (d disksScreen) View() string {
 		s.WriteString("\n")
 	}
 
-	s.WriteString("Press ESC to return to menu.")
 	return s.String()
 }

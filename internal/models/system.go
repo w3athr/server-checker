@@ -26,7 +26,7 @@ type RAMStick struct {
 type RAMInfo struct {
 	Total       uint64
 	Used        uint64
-	Free        uint64
+	Available   uint64
 	UsedPercent float64
 	Sticks      []RAMStick // список планок ОЗУ
 }
@@ -45,10 +45,13 @@ type DiskInfo struct {
 }
 
 type NetworkInfo struct {
-	Name string
-	IP   string
-	MAC  string
-	Up   bool
+	Name      string
+	Interface string
+	IP        string
+	MAC       string
+	Status    string // Up/Down
+	Speed     int    // Mbps
+	Model     string
 }
 
 type HostInfo struct {

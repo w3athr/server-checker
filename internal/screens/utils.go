@@ -1,6 +1,7 @@
 package screens
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -10,9 +11,6 @@ var (
 	warnStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FFA500"))
 	critStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FF0000"))
 	okStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#00FF00"))
-
-	// Константы размеров
-	gb = float64(1024 * 1024 * 1024)
 )
 
 func renderProgressBar(percent float64, width int) string {
@@ -36,6 +34,16 @@ func renderProgressBar(percent float64, width int) string {
 	return lipgloss.NewStyle().Foreground(lipgloss.Color(color)).Render(bar)
 }
 
-func formatBytes(bytes uint64) float64 {
-	return float64(bytes) / gb
+func formatBytes(bytes uint64) string {
+	const (
+		kb uint64 = 1024
+		mb uint64 = kb * 1024
+		gb uint64 = mb * 1024
+	)
+
+	if bytes < gb {
+		return fmt.Sprintf("%.2fMB", float64(bytes)/float64(mb))
+	}
+
+	return fmt.Sprintf("%.2fGB", float64(bytes)/float64(gb))
 }
