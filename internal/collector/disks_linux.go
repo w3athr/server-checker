@@ -43,11 +43,14 @@ func getPhysicalDriveData() map[string]models.DiskInfo {
 			if sm, err := smart.OpenNVMe(devPath); err == nil {
 				if data, err := sm.ReadSMART(); err == nil {
 					info.Wear = float64(data.PercentUsed)
+					info.PowerCycles = data.PowerCycles.Val[0]
+					info.PowerOnHours = data.PowerOnHours.Val[0]
+					info.UnsafeShutdowns = data.UnsafeShutdowns.Val[0]
 					info.Status = "OK"
-					if info.Wear > 50 {
-						info.Status = "Warning"
-					} else if info.Wear > 80 {
+					if info.Wear > 80 {
 						info.Status = "Critical"
+					} else if info.Wear > 50 {
+						info.Status = "Warning"
 					}
 				}
 				sm.Close()

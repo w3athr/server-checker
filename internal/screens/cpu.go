@@ -36,11 +36,23 @@ func (c cpuScreen) View() string {
 
 	var s strings.Builder
 
-	s.WriteString("CPU Information" + "\n\n")
+	s.WriteString("CPU and MotherBoard Information" + "\n\n")
 
 	s.WriteString(fmt.Sprintf("%s: %s\n", "Model", c.data.CPU.Model))
+
 	s.WriteString(fmt.Sprintf("%s %d Cores / %d Threads\n", "Cores:", c.data.CPU.Cores, c.data.CPU.Threads))
 	s.WriteString(fmt.Sprintf("%s %.2f GHz\n", "Speed:", c.data.CPU.Speed))
+
+	if c.data.CPU.Motherboard != "" {
+		s.WriteString(fmt.Sprintf("%s %s\n", "\nMotherBoard:", c.data.CPU.Motherboard))
+	} else {
+		s.WriteString("MotherBoard: N/A\n")
+	}
+	if c.data.CPU.MotherboardSerial != "" {
+		s.WriteString(fmt.Sprintf("%s %s\n", "Serial Number:", c.data.CPU.MotherboardSerial))
+	} else {
+		s.WriteString("Serial Number: N/A\n")
+	}
 
 	load := c.data.CPU.LoadPercent // простой прогресс-бар для загрузки
 	bar := renderProgressBar(load, 30)

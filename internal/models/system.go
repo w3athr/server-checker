@@ -9,11 +9,13 @@ type SystemInfo struct {
 }
 
 type CPUInfo struct {
-	Model       string
-	Cores       int     // ядра
-	Threads     int     // потоки
-	Speed       float64 // в ГГц
-	LoadPercent float64 // текущая загрузка в процентах
+	Model             string
+	Motherboard       string
+	MotherboardSerial string
+	Cores             int     // ядра
+	Threads           int     // потоки
+	Speed             float64 // в ГГц
+	LoadPercent       float64 // текущая загрузка в процентах
 }
 
 type RAMStick struct {
@@ -32,16 +34,19 @@ type RAMInfo struct {
 }
 
 type DiskInfo struct {
-	Device      string // логическое имя устройства, пр. "/dev/sda1"
-	Mountpoint  string // точка монтирования, пр. "/"
-	Total       uint64
-	Used        uint64
-	Free        uint64
-	UsedPercent float64
-	Model       string  // модель физического диска
-	Type        string  // тип диска HDD/SSD/NVMe
-	Wear        float64 // износ в процентах
-	Status      string  // состояние диска (OK, Warning, Critical)
+	Device          string // логическое имя устройства, пр. "/dev/sda1"
+	Mountpoint      string // точка монтирования, пр. "/"
+	Total           uint64
+	Used            uint64
+	Free            uint64
+	UsedPercent     float64
+	Model           string  // модель физического диска
+	Type            string  // тип диска HDD/SSD/NVMe
+	Wear            float64 // износ в процентах
+	Status          string  // состояние диска (OK, Warning, Critical)
+	PowerCycles     uint64  // количество включений
+	PowerOnHours    uint64  // часов работы
+	UnsafeShutdowns uint64  // небезопасных выключений
 }
 
 type NetworkInfo struct {

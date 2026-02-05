@@ -90,9 +90,13 @@ func (d disksScreen) renderContent() string {
 			} else if disk.Wear > 50 {
 				wearStyleLocal = warnStyle
 			}
-			s.WriteString(fmt.Sprintf("  Wear Level: %s (Status: %s)\n",
+			s.WriteString(fmt.Sprintf("  Wear Level: %s (Status: %s)\n  Power Cycles: %d\n  Power On Hours: %d\n  Unsafe Shutdowns: %d\n",
 				wearStyleLocal.Render(wearText),
-				disk.Status))
+				disk.Status,
+				disk.PowerCycles,
+				disk.PowerOnHours,
+				disk.UnsafeShutdowns,
+			))
 		} else {
 			s.WriteString("  Wear Level: N/A (Run as sudo or unsupported)" + "\n")
 		}

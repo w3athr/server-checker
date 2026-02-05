@@ -39,6 +39,9 @@ func collectDisks() []models.DiskInfo {
 				d.Type = info.Type
 				d.Wear = info.Wear
 				d.Status = info.Status
+				d.PowerCycles = info.PowerCycles
+				d.PowerOnHours = info.PowerOnHours
+				d.UnsafeShutdowns = info.UnsafeShutdowns
 				break
 			}
 		}
@@ -49,6 +52,9 @@ func collectDisks() []models.DiskInfo {
 				d.Model = info.Model
 				d.Type = info.Type
 				d.Status = info.Status
+				d.PowerCycles = info.PowerCycles
+				d.PowerOnHours = info.PowerOnHours
+				d.UnsafeShutdowns = info.UnsafeShutdowns
 			}
 		}
 

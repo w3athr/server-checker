@@ -21,7 +21,7 @@ type menuItem struct {
 func NewMenuScreen() menu {
 	return menu{
 		items: []menuItem{
-			{text: "CPU", onPress: func() tea.Model { return NewCPUScreen() }},
+			{text: "CPU and MotherBoard", onPress: func() tea.Model { return NewCPUScreen() }},
 			{text: "RAM", onPress: func() tea.Model { return NewRAMScreen() }},
 			{text: "Network", onPress: func() tea.Model { return NewNetworkScreen() }},
 			{text: "Disks", onPress: func() tea.Model { return NewDisksScreen() }},
