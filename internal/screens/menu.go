@@ -25,7 +25,7 @@ func NewMenuScreen() menu {
 			{text: "RAM", onPress: func() tea.Model { return NewRAMScreen() }},
 			{text: "Network", onPress: func() tea.Model { return NewNetworkScreen() }},
 			{text: "Disks", onPress: func() tea.Model { return NewDisksScreen() }},
-			{text: "Report", onPress: func() tea.Model { return NewReportScreen() }},
+			{text: "Report", onPress: func() tea.Model { return NewReportMenuScreen() }},
 		},
 	}
 }

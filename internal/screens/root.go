@@ -36,6 +36,7 @@ func (r root) Init() tea.Cmd {
 
 func (r root) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
+	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -47,31 +48,34 @@ func (r root) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case TickMsg:
 		r.data = models.SystemInfo(msg)        // обновление данных в корне при получении TickMsg
 		r.current, cmd = r.current.Update(msg) // передача сообщения текущему экрану
-		return r, doTick()                     // повторный запуск таймера
+		cmds = append(cmds, cmd)
+		cmds = append(cmds, doTick())
+		return r, doTick() // повторный запуск таймера
 
 	case tea.KeyMsg: // обработка клавиш
 		switch msg.String() {
-		case "enter":
-			if m, ok := r.current.(menu); ok {
-				selectedScreen := m.items[m.cursor].onPress()
-				r.current, cmd = selectedScreen.Update(tea.WindowSizeMsg{
-					Width:  r.width,
-					Height: r.height,
-				})
-			}
+
 		case "esc":
-			r.current = NewMenuScreen()
-			return r, func() tea.Msg {
-				return tea.WindowSizeMsg{Width: r.width, Height: r.height}
+			if _, ok := r.current.(menu); ok {
+				return r, tea.Quit
+			} else {
+				r.current = NewMenuScreen()
+				return r, func() tea.Msg {
+					return tea.WindowSizeMsg{Width: r.width, Height: r.height}
+				}
 			}
+
 		case "ctrl+c":
 			return r, tea.Quit
+
 		case "q", "Q":
 			if _, ok := r.current.(menu); ok {
 				return r, tea.Quit
 			} else {
 				r.current = NewMenuScreen()
-				return r, nil
+				return r, func() tea.Msg {
+					return tea.WindowSizeMsg{Width: r.width, Height: r.height}
+				}
 			}
 		}
 	}
