@@ -84,7 +84,7 @@ func (n networkScreen) View() string {
 	}
 
 	return fmt.Sprintf("%s\n%s\n%s",
-		"NIC information",
+		"NIC information\n",
 		n.viewport.View(),
 		"(↑/↓)/(k/j): Select | L: Blink LED (10s) | ESC: Menu")
 }

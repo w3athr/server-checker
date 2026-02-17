@@ -9,11 +9,13 @@ type SystemInfo struct {
 }
 
 type CPUInfo struct {
-	Model       string
-	Cores       int     // ядра
-	Threads     int     // потоки
-	Speed       float64 // в ГГц
-	LoadPercent float64 // текущая загрузка в процентах
+	Model             string
+	Motherboard       string
+	MotherboardSerial string
+	Cores             int     // ядра
+	Threads           int     // потоки
+	Speed             float64 // в ГГц
+	LoadPercent       float64 // текущая загрузка в процентах
 }
 
 type RAMStick struct {

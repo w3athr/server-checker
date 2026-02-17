@@ -43,15 +43,6 @@ func collectDisks() []models.DiskInfo {
 			}
 		}
 
-		// если соответствие не найдено (Windows), подставляем общие данные
-		if d.Model == "" && len(physData) > 1 {
-			for _, info := range physData {
-				d.Model = info.Model
-				d.Type = info.Type
-				d.Status = info.Status
-			}
-		}
-
 		finalDisks = append(finalDisks, d)
 	}
 	return finalDisks
