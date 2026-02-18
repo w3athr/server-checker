@@ -15,6 +15,8 @@ type templateSelectionScreen struct {
 	inputMode bool            // режим ввода пути к файлу
 	textInput textinput.Model // компонент ввода текста
 	err       string          // сообщение об ошибке
+	width     int
+	height    int
 }
 
 func NewTemplateSelectionScreen() templateSelectionScreen {
@@ -43,6 +45,11 @@ func (t templateSelectionScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		t.width = msg.Width
+		t.height = msg.Height
+		return t, nil
+
 	case tea.KeyMsg:
 		// Если в режиме ввода текста
 		if t.inputMode {
@@ -54,14 +61,20 @@ func (t templateSelectionScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					SelectedTemplateName = "Custom"
 					SelectedTemplatePath = path
 					// Возврат в меню отчетов
-					return NewReportMenuScreen(), tea.ClearScreen
+					return NewReportMenuScreen(), tea.Batch(
+						func() tea.Msg { return tea.WindowSizeMsg{Width: t.width, Height: t.height} },
+						tea.ClearScreen,
+					)
 				}
 
 			case "esc":
 				// отмена ввода
 				t.inputMode = false
 				t.textInput.Reset()
-				return t, tea.ClearScreen
+				return t, tea.Batch(
+					func() tea.Msg { return tea.WindowSizeMsg{Width: t.width, Height: t.height} },
+					tea.ClearScreen,
+				)
 			}
 
 			t.textInput, cmd = t.textInput.Update(msg)
@@ -84,17 +97,26 @@ func (t templateSelectionScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			selected := t.options[t.cursor]
 			if selected == "Custom Template" {
 				t.inputMode = true // Включение режима ввода
-				return t, tea.ClearScreen
+				return t, tea.Batch(
+					func() tea.Msg { return tea.WindowSizeMsg{Width: t.width, Height: t.height} },
+					tea.ClearScreen,
+				)
 			} else {
 				// Сохранение выбора предустановленного шаблона
 				SelectedTemplateName = selected
 				SelectedTemplatePath = "" // Пустой путь, потом добавлю
 				// Возврат в меню отчета
-				return NewReportMenuScreen(), tea.ClearScreen
+				return NewReportMenuScreen(), tea.Batch(
+					func() tea.Msg { return tea.WindowSizeMsg{Width: t.width, Height: t.height} },
+					tea.ClearScreen,
+				)
 			}
 
 		case "esc":
-			return NewReportMenuScreen(), tea.ClearScreen
+			return NewReportMenuScreen(), tea.Batch(
+				func() tea.Msg { return tea.WindowSizeMsg{Width: t.width, Height: t.height} },
+				tea.ClearScreen,
+			)
 		}
 	}
 

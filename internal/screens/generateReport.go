@@ -18,6 +18,8 @@ type generateReportScreen struct {
 	status string // Generating, Success, Error
 	err    error
 	done   bool
+	width  int
+	height int
 }
 
 type reportResultMsg struct {
@@ -38,7 +40,13 @@ func (g generateReportScreen) Init() tea.Cmd {
 
 func (g generateReportScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		g.width = msg.Width
+		g.height = msg.Height
+		return g, nil
+
 	case reportResultMsg:
+		g.done = true
 		if msg.err != nil {
 			g.status = fmt.Sprintf("Error: %v", msg.err)
 			g.err = msg.err
@@ -50,11 +58,17 @@ func (g generateReportScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		if g.done {
 			if msg.String() == "esc" || msg.String() == "enter" {
-				return NewReportMenuScreen(), tea.ClearScreen
+				return NewReportMenuScreen(), tea.Batch(
+					tea.ClearScreen,
+					func() tea.Msg { return tea.WindowSizeMsg{Width: g.width, Height: g.height} },
+				)
 			}
 		} else {
 			if msg.String() == "esc" {
-				return NewReportMenuScreen(), tea.ClearScreen
+				return NewReportMenuScreen(), tea.Batch(
+					tea.ClearScreen,
+					func() tea.Msg { return tea.WindowSizeMsg{Width: g.width, Height: g.height} },
+				)
 			}
 		}
 	}
@@ -75,15 +89,6 @@ func (g generateReportScreen) View() string {
 }
 
 func generateReportCmd() tea.Msg {
-	// ОТЛАДКА: Пишем лог в файл, чтобы понять, где застревает
-	f, _ := os.Create("debug_log.txt")
-	defer f.Close()
-	logger := func(msg string) {
-		f.WriteString(time.Now().Format(time.RFC3339) + " " + msg + "\n")
-	}
-
-	logger("Starting generation...")
-
 	// Получаем выбранный шаблон
 	var tmpl models.SystemTemplate
 	var ok bool

@@ -79,5 +79,5 @@ func (r ramScreen) View() string {
 	return fmt.Sprintf("%s\n%s\n%s",
 		"RAM information\n",
 		r.viewport.View(),
-		"\n(↑/↓)/(k/j): Scroll | ESC: Menu")
+		"\n(↑/↓)/(k/j): Scroll | Q: Menu")
 }
