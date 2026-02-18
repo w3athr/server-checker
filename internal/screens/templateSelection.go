@@ -18,7 +18,7 @@ func (t templateSelectionScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		if msg.String() == "esc" {
 			// Возвращаемся в меню отчетов
-			return NewReportMenuScreen(), nil
+			return NewReportMenuScreen(), tea.ClearScreen
 		}
 	}
 	return t, nil

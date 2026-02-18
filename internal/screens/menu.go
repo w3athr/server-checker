@@ -54,9 +54,10 @@ func (m menu) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "enter":
 			newModel := m.items[m.cursor].onPress()
-			return newModel, func() tea.Msg {
-				return tea.WindowSizeMsg{Width: m.lastWidth, Height: m.lastHeight}
-			}
+			return newModel, tea.Batch(
+				func() tea.Msg { return tea.WindowSizeMsg{Width: m.lastWidth, Height: m.lastHeight} },
+				tea.ClearScreen,
+			)
 		}
 	}
 	return m, nil

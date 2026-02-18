@@ -54,7 +54,7 @@ func (d disksScreen) View() string {
 	return fmt.Sprintf("%s\n%s\n%s",
 		"Disks information\n",
 		d.viewport.View(),
-		"\n(↑/↓)/(k/j): Scroll | ESC: Menu")
+		"\n(↑/↓)/(k/j): Scroll | Q: Menu")
 }
 
 func (d disksScreen) renderContent() string {

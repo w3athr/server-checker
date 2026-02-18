@@ -49,7 +49,7 @@ func (r ramScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (r ramScreen) renderContent() string {
 	if r.data.RAM.Total == 0 { // если данные еще не пришли
-		return "Loading RAM data...\n\nPress ESC to return to menu."
+		return "Loading RAM data...\n\nPress Q to return to menu."
 	}
 
 	var s strings.Builder

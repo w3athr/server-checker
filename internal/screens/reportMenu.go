@@ -52,15 +52,16 @@ func (rm reportMenu) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter":
 			// При нажатии Enter запускаем соответствующую модель из подменю.
 			newModel := rm.items[rm.cursor].onPress()
-			return newModel, func() tea.Msg {
-				// Передаем размеры окна новой модели, чтобы она правильно инициализировалась.
-				return tea.WindowSizeMsg{Width: rm.lastWidth, Height: rm.lastHeight}
-			}
+			return newModel, tea.Batch(
+				func() tea.Msg { return tea.WindowSizeMsg{Width: rm.lastWidth, Height: rm.lastHeight} },
+				tea.ClearScreen,
+			)
 		case "esc":
 			// Возврат в главное меню
-			return NewMenuScreen(), func() tea.Msg {
-				return tea.WindowSizeMsg{Width: rm.lastWidth, Height: rm.lastHeight}
-			}
+			return NewMenuScreen(), tea.Batch(
+				func() tea.Msg { return tea.WindowSizeMsg{Width: rm.lastWidth, Height: rm.lastHeight} },
+				tea.ClearScreen,
+			)
 		}
 	}
 	return rm, nil

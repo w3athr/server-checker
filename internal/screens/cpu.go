@@ -60,7 +60,7 @@ func (c cpuScreen) View() string {
 	s.WriteString("\n" + "Current Load: " + fmt.Sprintf("%.2f%%", load) + "\n")
 	s.WriteString(bar + "\n\n")
 
-	s.WriteString("\n" + "ESC: Menu")
+	s.WriteString("\n" + "Q: Menu")
 
 	return s.String()
 }

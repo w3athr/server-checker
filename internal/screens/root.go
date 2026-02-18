@@ -55,16 +55,6 @@ func (r root) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg: // обработка клавиш
 		switch msg.String() {
 
-		case "esc":
-			if _, ok := r.current.(menu); ok {
-				return r, tea.Quit
-			} else {
-				r.current = NewMenuScreen()
-				return r, func() tea.Msg {
-					return tea.WindowSizeMsg{Width: r.width, Height: r.height}
-				}
-			}
-
 		case "ctrl+c":
 			return r, tea.Quit
 
@@ -73,9 +63,10 @@ func (r root) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return r, tea.Quit
 			} else {
 				r.current = NewMenuScreen()
-				return r, func() tea.Msg {
-					return tea.WindowSizeMsg{Width: r.width, Height: r.height}
-				}
+				return r, tea.Batch(
+					func() tea.Msg { return tea.WindowSizeMsg{Width: r.width, Height: r.height} },
+					tea.ClearScreen,
+				)
 			}
 		}
 	}
