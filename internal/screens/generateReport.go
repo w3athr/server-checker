@@ -7,6 +7,7 @@ import (
 	"server-checker/internal/collector"
 	"server-checker/internal/models"
 	"server-checker/internal/templates"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -25,6 +26,21 @@ type generateReportScreen struct {
 type reportResultMsg struct {
 	path string
 	err  error
+}
+
+type checkResult struct {
+	Name     string `yaml:"parameter"`
+	Expected string `yaml:"expected"`
+	Actual   string `yaml:"actual"`
+	Passed   bool   `yaml:"is_passed"`
+}
+
+type yamlReport struct {
+	TemplateName string            `yaml:"template_name"`
+	Timestamp    string            `yaml:"timestamp"`
+	Summary      string            `yaml:"summary"`
+	Checks       []checkResult     `yaml:"checks"`
+	RawData      models.SystemInfo `yaml:"raw_system_data"` // Оставим сырые данные внизу для справки
 }
 
 func NewGenerateReportScreen() generateReportScreen {
@@ -145,29 +161,158 @@ func generateReportCmd() tea.Msg {
 	return reportResultMsg{path: absPath}
 }
 
+func runHealthCheck(tmpl models.SystemTemplate, data models.SystemInfo) []checkResult {
+	var results []checkResult
+
+	// 1. Проверка CPU Cores
+	results = append(results, checkResult{
+		Name:     "CPU Cores",
+		Expected: fmt.Sprintf(">= %d", tmpl.CPU.MinCores),
+		Actual:   fmt.Sprintf("%d", data.CPU.Cores),
+		Passed:   data.CPU.Cores >= tmpl.CPU.MinCores,
+	})
+
+	// 2. Проверка RAM
+	totalRAMGB := int(data.RAM.Total / 1024 / 1024 / 1024)
+	results = append(results, checkResult{
+		Name:     "Total RAM",
+		Expected: fmt.Sprintf(">= %d GB", tmpl.RAM.MinTotalGB),
+		Actual:   fmt.Sprintf("%d GB", totalRAMGB),
+		Passed:   totalRAMGB >= tmpl.RAM.MinTotalGB,
+	})
+
+	// 3. Проверка дисков (ищем хотя бы один подходящий диск под требования шаблона)
+	// Для простоты: проверяем, есть ли хоть один диск нужного типа и размера
+	for _, dt := range tmpl.Disks {
+		found := false
+		actualSize := 0
+		for _, ad := range data.Disks {
+			sizeGB := int(ad.Total / 1024 / 1024 / 1024)
+			if ad.Type == dt.Type && sizeGB >= dt.MinSizeGB {
+				found = true
+				actualSize = sizeGB
+				break
+			}
+		}
+
+		statusName := fmt.Sprintf("Disk: %s (%s)", dt.Name, dt.Type)
+		results = append(results, checkResult{
+			Name:     statusName,
+			Expected: fmt.Sprintf(">= %d GB", dt.MinSizeGB),
+			Actual:   fmt.Sprintf("%d GB", actualSize),
+			Passed:   found,
+		})
+	}
+
+	return results
+}
+
 func generateTXTReport(dir string, tmpl models.SystemTemplate, data models.SystemInfo) error {
-	content := fmt.Sprintf("Health Check Report\nTemplate: %s\nDate: %s\n\n", tmpl.Name, time.Now().Format(time.RFC1123))
+	results := runHealthCheck(tmpl, data)
 
-	// Здесь будет логика сравнения...
-	content += fmt.Sprintf("CPU Check:\n")
-	content += fmt.Sprintf("  Template: Min %d Cores, %.1f GHz\n", tmpl.CPU.MinCores, tmpl.CPU.MinSpeed)
-	content += fmt.Sprintf("  Actual:   %d Cores, %.1f GHz\n", data.CPU.Cores, data.CPU.Speed)
+	var sb strings.Builder
+	sb.WriteString("==========================================\n")
+	sb.WriteString(fmt.Sprintf("HEALTH CHECK REPORT: %s\n", tmpl.Name))
+	sb.WriteString(fmt.Sprintf("Date: %s\n", time.Now().Format(time.RFC1123)))
+	sb.WriteString("==========================================\n\n")
 
-	// ... (добавить остальные проверки)
+	for _, r := range results {
+		status := "[ PASS ]"
+		if !r.Passed {
+			status = "[ FAIL ]"
+		}
+		sb.WriteString(fmt.Sprintf("%-20s %-10s (Exp: %-10s, Act: %-10s)\n",
+			r.Name, status, r.Expected, r.Actual))
+	}
 
-	return os.WriteFile(filepath.Join(dir, "report.txt"), []byte(content), 0644)
+	return os.WriteFile(filepath.Join(dir, "report.txt"), []byte(sb.String()), 0644)
 }
 
 func generateYAMLReport(dir string, tmpl models.SystemTemplate, data models.SystemInfo) error {
-	// Просто сохраняем текущие данные в YAML для начала
-	bytes, err := yaml.Marshal(data)
-	if err != nil {
-		return err
+	// Получаем результаты сравнения
+	results := runHealthCheck(tmpl, data)
+
+	// Считаем общие итоги (все ли проверки пройдены)
+	globalPass := true
+	for _, r := range results {
+		if !r.Passed {
+			globalPass = false
+			break
+		}
 	}
+
+	summary := "PASS"
+	if !globalPass {
+		summary = "FAIL"
+	}
+
+	// Формируем финальную структуру
+	report := yamlReport{
+		TemplateName: tmpl.Name,
+		Timestamp:    time.Now().Format(time.RFC3339),
+		Summary:      summary,
+		Checks:       results,
+		RawData:      data,
+	}
+
+	// Сериализуем (превращаем в текст YAML)
+	bytes, err := yaml.Marshal(report)
+	if err != nil {
+		return fmt.Errorf("failed to marshal YAML: %w", err)
+	}
+
+	// Записываем в файл
 	return os.WriteFile(filepath.Join(dir, "report.yaml"), bytes, 0644)
 }
 
 func generateHTMLReport(dir string, tmpl models.SystemTemplate, data models.SystemInfo) error {
-	content := "<html><body><h1>Health Check Report</h1></body></html>" // Заглушка
-	return os.WriteFile(filepath.Join(dir, "report.html"), []byte(content), 0644)
+	results := runHealthCheck(tmpl, data)
+
+	htmlHeader := `
+	<html>
+	<head>
+		<meta charset="UTF-8">
+		<style>
+			body { font-family: sans-serif; margin: 40px; background: #f4f4f9; }
+			table { width: 100%; border-collapse: collapse; background: white; }
+			th, td { padding: 12px; border: 1px solid #ddd; text-align: left; }
+			th { background-color: #4CAF50; color: white; }
+			.pass { color: green; font-weight: bold; }
+			.fail { color: red; font-weight: bold; }
+			.header { margin-bottom: 20px; }
+		</style>
+	</head>
+	<body>
+		<div class="header">
+			<h1>Health Check: ` + tmpl.Name + `</h1>
+			<p>Generated on: ` + time.Now().Format(time.RFC1123) + `</p>
+		</div>
+		<table>
+			<tr>
+				<th>Parameter</th>
+				<th>Expected</th>
+				<th>Actual</th>
+				<th>Status</th>
+			</tr>`
+
+	var rows string
+	for _, r := range results {
+		statusClass := "pass"
+		statusText := "OK"
+		if !r.Passed {
+			statusClass = "fail"
+			statusText = "FAIL"
+		}
+		rows += fmt.Sprintf(`
+			<tr>
+				<td>%s</td>
+				<td>%s</td>
+				<td>%s</td>
+				<td class="%s">%s</td>
+			</tr>`, r.Name, r.Expected, r.Actual, statusClass, statusText)
+	}
+
+	footer := `</table></body></html>`
+
+	return os.WriteFile(filepath.Join(dir, "report.html"), []byte(htmlHeader+rows+footer), 0644)
 }
