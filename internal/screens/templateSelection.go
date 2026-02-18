@@ -26,7 +26,7 @@ func NewTemplateSelectionScreen() templateSelectionScreen {
 
 	return templateSelectionScreen{
 		options: []string{
-			"Рубеж-H1",
+			"Рубеж-Н1",
 			"Рубеж-С",
 			"Рубеж-Т",
 			"Custom Template",

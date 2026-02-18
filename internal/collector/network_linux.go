@@ -18,7 +18,10 @@ import (
 func collectNetwork() []models.NetworkInfo {
 	var netList []models.NetworkInfo
 
-	pci, _ := ghw.PCI()
+	pci, err := ghw.PCI(ghw.WithDisableWarnings())
+	if err != nil {
+		pci = nil // Если не удалось получить доступ к PCI, просто работаем без него
+	}
 
 	interfaces, _ := os.ReadDir("/sys/class/net")
 	for _, iface := range interfaces {
@@ -57,8 +60,9 @@ func collectNetwork() []models.NetworkInfo {
 				}
 			}
 		}
+		// Fallback, если модель не определилась (например в WSL)
 		if info.Model == "" {
-			info.Model = "Ethernet Controller"
+			info.Model = "Generic Ethernet Controller"
 		}
 
 		netList = append(netList, info)

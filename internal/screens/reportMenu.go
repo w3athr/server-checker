@@ -55,6 +55,7 @@ func (rm reportMenu) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return newModel, tea.Batch(
 				func() tea.Msg { return tea.WindowSizeMsg{Width: rm.lastWidth, Height: rm.lastHeight} },
 				tea.ClearScreen,
+				newModel.Init(),
 			)
 		case "esc":
 			// Возврат в главное меню
