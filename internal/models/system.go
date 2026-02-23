@@ -59,13 +59,14 @@ type BlockDeviceInfo struct {
 }
 
 type NetworkInfo struct {
-	Name      string
-	Interface string
-	IP        string
-	MAC       string
-	Status    string // Up/Down
-	Speed     int    // Mbps
-	Model     string
+	Name         string
+	Interface    string
+	IP           string
+	MAC          string
+	Status       string // Up/Down
+	Speed        int    // текущая скорость линка, Mbps
+	MaxSpeedMbps int    // максимально, поддерживаемая, Mbps
+	Model        string
 }
 
 type HostInfo struct {

@@ -1,10 +1,12 @@
 package screens
 
 import (
+	"bytes"
 	"fmt"
 	"server-checker/internal/collector"
 	"server-checker/internal/models"
 	"strings"
+	"text/tabwriter"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -86,7 +88,7 @@ func (n networkScreen) View() string {
 	return fmt.Sprintf("%s\n%s\n%s",
 		"NIC information\n",
 		n.viewport.View(),
-		"(↑/↓)/(k/j): Select | L: Blink LED (10s) | Q: Menu")
+		"(↑/↓)/(k/j): Select | L: Blink LED (5s) | Q: Menu")
 }
 
 func (n networkScreen) renderContent() string {
@@ -119,15 +121,28 @@ func (n networkScreen) renderContent() string {
 
 		// Формируем карточку интерфейса
 		card := fmt.Sprintf("%s [%s] %s %s\n", cursorChar, net.Interface, coloredDot, net.Status)
-		card += fmt.Sprintf("   Model: %s\n", net.Model)
-		card += fmt.Sprintf("   MAC:   %s\n", net.MAC)
+		var buf bytes.Buffer
+		tw := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
 
-		speedStr := "N/A"
+		fmt.Fprintf(tw, "   Model:\t%s\n", net.Model)
+		fmt.Fprintf(tw, "   MAC:\t%s\n", net.MAC)
+
+		cur := "N/A"
 		if net.Speed > 0 {
-			speedStr = fmt.Sprintf("%d Mbps", net.Speed)
+			cur = fmt.Sprintf("%d Mbps", net.Speed)
 		}
-		card += fmt.Sprintf("   Speed: %s", speedStr)
+		fmt.Fprintf(tw, "   CurrentSpeed:\t%s\n", cur)
 
+		max := "N/A"
+		if net.MaxSpeedMbps > 0 {
+			max = fmt.Sprintf("%d Mbps", net.MaxSpeedMbps)
+		}
+		fmt.Fprintf(tw, "   MaxSpeed:\t%s\n", max)
+
+		fmt.Fprintf(tw, "   IP:\t%s\n", net.IP)
+
+		_ = tw.Flush()
+		card += buf.String()
 		s.WriteString(style.Render(card) + "\n\n")
 	}
 
@@ -135,7 +150,7 @@ func (n networkScreen) renderContent() string {
 }
 
 func (n *networkScreen) syncViewport() {
-	itemHeight := 8 // Количество строк, которое занимает один интерфейс (4 текста + 2 отступа)
+	itemHeight := 10 // Количество строк, которое занимает один интерфейс (4 текста + 2 отступа)
 
 	// Вычисляем позицию верхней и нижней границы текущего элемента
 	topOfItem := n.cursor * itemHeight
