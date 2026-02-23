@@ -29,6 +29,7 @@ func CollectAll() (models.SystemInfo, error) {
 		staticData.RAM.Sticks = getPhysicalRAM()
 		// информация о дисках (модель, тип, износ)
 		physDiskData = getPhysicalDriveData()
+		staticData.BlockDevs = collectBlockDevices(physDiskData)
 	})
 
 	// копирование статических данных для дальнейшего обновления динамических

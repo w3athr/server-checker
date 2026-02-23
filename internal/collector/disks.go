@@ -1,9 +1,11 @@
 package collector
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"server-checker/internal/models"
+	"strconv"
 	"strings"
 
 	"github.com/anatol/smart.go"
@@ -42,6 +44,10 @@ func collectDisks() []models.DiskInfo {
 				d.Type = info.Type
 				d.Wear = info.Wear
 				d.Status = info.Status
+
+				d.PowerCycles = info.PowerCycles
+				d.PowerOnHours = info.PowerOnHours
+				d.UnsafeShutdowns = info.UnsafeShutdowns
 				break
 			}
 		}
@@ -81,6 +87,9 @@ func getPhysicalDriveData() map[string]models.DiskInfo {
 			if sm, err := smart.OpenNVMe(devPath); err == nil {
 				if data, err := sm.ReadSMART(); err == nil {
 					info.Wear = float64(data.PercentUsed)
+					info.PowerCycles = data.PowerCycles.Val[0]
+					info.PowerOnHours = data.PowerOnHours.Val[0]
+					info.UnsafeShutdowns = data.UnsafeShutdowns.Val[0]
 					info.Status = "OK"
 					if info.Wear > 80 {
 						info.Status = "Critical"
@@ -92,4 +101,53 @@ func getPhysicalDriveData() map[string]models.DiskInfo {
 		driveMap[devPath] = info
 	}
 	return driveMap
+}
+
+func collectBlockDevices(phys map[string]models.DiskInfo) []models.BlockDeviceInfo {
+	devs, _ := os.ReadDir("/sys/block")
+	out := make([]models.BlockDeviceInfo, 0, len(devs))
+
+	for _, d := range devs {
+		name := d.Name()
+		if strings.HasPrefix(name, "loop") || strings.HasPrefix(name, "ram") {
+			continue
+		}
+
+		devPath := "/dev/" + name
+
+		// размер берем из /sys/block/<dev>/size (кол-во 512B секторов)
+		sizeBytes, _ := readBlockDevSizeBytes(name)
+
+		// модель/тип берем из phys мапы, которую ты уже собираешь
+		p := phys[devPath]
+		if p.Model == "" {
+			p.Model = "Unknown"
+		}
+		if p.Type == "" {
+			p.Type = "Unknown"
+		}
+
+		out = append(out, models.BlockDeviceInfo{
+			Device: devPath,
+			Model:  p.Model,
+			Type:   p.Type,
+			Size:   sizeBytes,
+		})
+	}
+
+	return out
+}
+
+func readBlockDevSizeBytes(sysName string) (uint64, error) {
+	// /sys/block/sda/size -> количество 512-byte секторов
+	b, err := os.ReadFile(filepath.Join("/sys/block", sysName, "size"))
+	if err != nil {
+		return 0, err
+	}
+	secStr := strings.TrimSpace(string(b))
+	sectors, err := strconv.ParseUint(secStr, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("parse /sys/block/%s/size: %w", sysName, err)
+	}
+	return sectors * 512, nil
 }

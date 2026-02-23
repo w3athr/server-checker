@@ -1,8 +1,11 @@
 package screens
 
 import (
+	"bytes"
+	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"server-checker/internal/collector"
 	"server-checker/internal/models"
@@ -130,6 +133,7 @@ func generateReportCmd() tea.Msg {
 			return reportResultMsg{err: fmt.Errorf("unknown template: %s", SelectedTemplateName)}
 		}
 	}
+
 	// Собираем текущие данные
 	currentData, err := collector.CollectAll()
 	if err != nil {
@@ -145,6 +149,13 @@ func generateReportCmd() tea.Msg {
 
 	if err := os.MkdirAll(absPath, 0755); err != nil {
 		return reportResultMsg{err: fmt.Errorf("failed to create directory: %w", err)}
+	}
+
+	// NEW: диагностические логи в ./logs/*.txt
+	if err := generateDiagnosticsLogs(absPath); err != nil {
+		// Я сделал так: если логи не снялись, это не убивает весь отчет, но мы честно падаем с ошибкой.
+		// Если хочешь "продолжать любой ценой", скажи, переделаю на warning.
+		return reportResultMsg{err: err}
 	}
 
 	// Генерируем отчеты
@@ -181,8 +192,7 @@ func runHealthCheck(tmpl models.SystemTemplate, data models.SystemInfo) []checkR
 		Passed:   totalRAMGB >= tmpl.RAM.MinTotalGB,
 	})
 
-	// 3. Проверка дисков (ищем хотя бы один подходящий диск под требования шаблона)
-	// Для простоты: проверяем, есть ли хоть один диск нужного типа и размера
+	// 3. Проверка дисков
 	for _, dt := range tmpl.Disks {
 		found := false
 		actualSize := 0
@@ -229,10 +239,8 @@ func generateTXTReport(dir string, tmpl models.SystemTemplate, data models.Syste
 }
 
 func generateYAMLReport(dir string, tmpl models.SystemTemplate, data models.SystemInfo) error {
-	// Получаем результаты сравнения
 	results := runHealthCheck(tmpl, data)
 
-	// Считаем общие итоги (все ли проверки пройдены)
 	globalPass := true
 	for _, r := range results {
 		if !r.Passed {
@@ -246,7 +254,6 @@ func generateYAMLReport(dir string, tmpl models.SystemTemplate, data models.Syst
 		summary = "FAIL"
 	}
 
-	// Формируем финальную структуру
 	report := yamlReport{
 		TemplateName: tmpl.Name,
 		Timestamp:    time.Now().Format(time.RFC3339),
@@ -255,13 +262,11 @@ func generateYAMLReport(dir string, tmpl models.SystemTemplate, data models.Syst
 		RawData:      data,
 	}
 
-	// Сериализуем (превращаем в текст YAML)
 	bytes, err := yaml.Marshal(report)
 	if err != nil {
 		return fmt.Errorf("failed to marshal YAML: %w", err)
 	}
 
-	// Записываем в файл
 	return os.WriteFile(filepath.Join(dir, "report.yaml"), bytes, 0644)
 }
 
@@ -315,4 +320,146 @@ func generateHTMLReport(dir string, tmpl models.SystemTemplate, data models.Syst
 	footer := `</table></body></html>`
 
 	return os.WriteFile(filepath.Join(dir, "report.html"), []byte(htmlHeader+rows+footer), 0644)
+}
+
+/*
+	========================
+	NEW: diagnostics logs
+	========================
+*/
+
+type multiError struct {
+	errs []error
+}
+
+func (m *multiError) add(err error) {
+	if err != nil {
+		m.errs = append(m.errs, err)
+	}
+}
+
+func (m *multiError) Err() error {
+	if len(m.errs) == 0 {
+		return nil
+	}
+	var sb strings.Builder
+	sb.WriteString("diagnostics log collection failed:\n")
+	for i, e := range m.errs {
+		sb.WriteString(fmt.Sprintf("  %d) %v\n", i+1, e))
+	}
+	return fmt.Errorf(sb.String())
+}
+
+func generateDiagnosticsLogs(reportDir string) error {
+	logsDir := filepath.Join(reportDir, "logs")
+	if err := os.MkdirAll(logsDir, 0755); err != nil {
+		return fmt.Errorf("failed to create logs dir: %w", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+
+	var merr multiError
+
+	// Команды
+	merr.add(writeCommandOutput(ctx, logsDir, "dmesg.txt", "dmesg"))
+	merr.add(writeCommandOutput(ctx, logsDir, "lspci-k.txt", "lspci", "-k"))
+	merr.add(writeCommandOutput(ctx, logsDir, "lsusb.txt", "lsusb"))
+	merr.add(writeCommandOutput(ctx, logsDir, "lsblk.txt", "lsblk"))
+
+	// Файлы sysfs (как ты и попросил)
+	merr.add(writeFileContents(logsDir, "sys_vendor.txt", "/sys/class/dmi/id/sys_vendor"))
+	merr.add(writeFileContents(logsDir, "product_name.txt", "/sys/class/dmi/id/product_name"))
+	merr.add(writeFileContents(logsDir, "product_serial.txt", "/sys/class/dmi/id/product_serial"))
+
+	return merr.Err()
+}
+
+func writeCommandOutput(ctx context.Context, dir, outFile, name string, args ...string) error {
+	fullPath := filepath.Join(dir, outFile)
+
+	cmd := exec.CommandContext(ctx, name, args...)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	start := time.Now()
+	err := cmd.Run()
+	duration := time.Since(start)
+
+	var sb strings.Builder
+	sb.WriteString("==========================================\n")
+	sb.WriteString("COMMAND OUTPUT\n")
+	sb.WriteString(fmt.Sprintf("Timestamp: %s\n", start.Format(time.RFC3339)))
+	sb.WriteString(fmt.Sprintf("Command: %s\n", strings.Join(append([]string{name}, args...), " ")))
+	sb.WriteString(fmt.Sprintf("Duration: %s\n", duration))
+	sb.WriteString("==========================================\n\n")
+
+	if stdout.Len() > 0 {
+		sb.WriteString("----- STDOUT -----\n")
+		sb.Write(stdout.Bytes())
+		if !strings.HasSuffix(stdout.String(), "\n") {
+			sb.WriteString("\n")
+		}
+		sb.WriteString("\n")
+	}
+
+	if stderr.Len() > 0 {
+		sb.WriteString("----- STDERR -----\n")
+		sb.Write(stderr.Bytes())
+		if !strings.HasSuffix(stderr.String(), "\n") {
+			sb.WriteString("\n")
+		}
+		sb.WriteString("\n")
+	}
+
+	if err != nil {
+		// Ошибка тоже фиксируется в файле, но наружу возвращаем ее, чтобы ты видел, что конкретно не выполнилось.
+		sb.WriteString("----- ERROR -----\n")
+		sb.WriteString(err.Error())
+		sb.WriteString("\n")
+	}
+
+	if werr := os.WriteFile(fullPath, []byte(sb.String()), 0644); werr != nil {
+		return fmt.Errorf("failed to write %s: %w", fullPath, werr)
+	}
+
+	if err != nil {
+		return fmt.Errorf("command failed (%s): %w", outFile, err)
+	}
+	return nil
+}
+
+func writeFileContents(dir, outFile, srcPath string) error {
+	fullPath := filepath.Join(dir, outFile)
+
+	b, err := os.ReadFile(srcPath)
+	now := time.Now()
+
+	var sb strings.Builder
+	sb.WriteString("==========================================\n")
+	sb.WriteString("FILE CONTENTS\n")
+	sb.WriteString(fmt.Sprintf("Timestamp: %s\n", now.Format(time.RFC3339)))
+	sb.WriteString(fmt.Sprintf("Source: %s\n", srcPath))
+	sb.WriteString("==========================================\n\n")
+
+	if err != nil {
+		sb.WriteString("----- ERROR -----\n")
+		sb.WriteString(err.Error())
+		sb.WriteString("\n")
+		if werr := os.WriteFile(fullPath, []byte(sb.String()), 0644); werr != nil {
+			return fmt.Errorf("failed to write %s: %w", fullPath, werr)
+		}
+		return fmt.Errorf("failed to read %s: %w", srcPath, err)
+	}
+
+	sb.Write(b)
+	if len(b) > 0 && b[len(b)-1] != '\n' {
+		sb.WriteString("\n")
+	}
+
+	if werr := os.WriteFile(fullPath, []byte(sb.String()), 0644); werr != nil {
+		return fmt.Errorf("failed to write %s: %w", fullPath, werr)
+	}
+	return nil
 }
