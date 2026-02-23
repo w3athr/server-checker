@@ -35,26 +35,24 @@ type RAMInfo struct {
 }
 
 type DiskInfo struct {
-	Device          string // логическое имя устройства, пр. "/dev/sda1"
-	Mountpoint      string // точка монтирования, пр. "/"
-	Total           uint64
-	Used            uint64
-	Free            uint64
-	UsedPercent     float64
-	Model           string  // модель физического диска
-	Type            string  // тип диска HDD/SSD/NVMe
+	Device      string // логическое имя устройства, пр. "/dev/sda1"
+	Mountpoint  string // точка монтирования, пр. "/"
+	Total       uint64
+	Used        uint64
+	Free        uint64
+	UsedPercent float64
+}
+
+type BlockDeviceInfo struct {
+	Device          string // "/dev/sda", "/dev/nvme0n1"
+	Model           string
+	Type            string  // HDD/SSD/NVMe
+	Size            uint64  // общий размер устройства
 	Wear            float64 // износ в процентах
 	Status          string  // состояние диска (OK, Warning, Critical)
 	PowerCycles     uint64  // количество включений
 	PowerOnHours    uint64  // часов работы
 	UnsafeShutdowns uint64  // небезопасных выключений
-}
-
-type BlockDeviceInfo struct {
-	Device string // "/dev/sda", "/dev/nvme0n1"
-	Model  string
-	Type   string // HDD/SSD/NVMe
-	Size   uint64 // общий размер устройства
 }
 
 type NetworkInfo struct {

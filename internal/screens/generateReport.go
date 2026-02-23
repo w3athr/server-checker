@@ -43,7 +43,7 @@ type yamlReport struct {
 	Timestamp    string            `yaml:"timestamp"`
 	Summary      string            `yaml:"summary"`
 	Checks       []checkResult     `yaml:"checks"`
-	RawData      models.SystemInfo `yaml:"raw_system_data"` // Оставим сырые данные внизу для справки
+	RawData      models.SystemInfo `yaml:"raw_system_data"`
 }
 
 func NewGenerateReportScreen() generateReportScreen {
@@ -117,7 +117,6 @@ func generateReportCmd() tea.Msg {
 	}
 
 	if SelectedTemplateName == "Custom" {
-		// Читаем файл
 		data, err := os.ReadFile(SelectedTemplatePath)
 		if err != nil {
 			return reportResultMsg{err: fmt.Errorf("failed to read template file: %w", err)}
@@ -127,20 +126,17 @@ func generateReportCmd() tea.Msg {
 			return reportResultMsg{err: fmt.Errorf("invalid YAML template: %w", err)}
 		}
 	} else {
-		// Берем встроенный
 		tmpl, ok = templates.GetEmbeddedTemplate(SelectedTemplateName)
 		if !ok {
 			return reportResultMsg{err: fmt.Errorf("unknown template: %s", SelectedTemplateName)}
 		}
 	}
 
-	// Собираем текущие данные
 	currentData, err := collector.CollectAll()
 	if err != nil {
 		return reportResultMsg{err: fmt.Errorf("failed to collect system data: %w", err)}
 	}
 
-	// Создаем директорию для отчета
 	dirName := fmt.Sprintf("HealthCheck-%s", time.Now().Format("2006-01-02_15-04-05"))
 	absPath, err := filepath.Abs(dirName)
 	if err != nil {
@@ -151,14 +147,10 @@ func generateReportCmd() tea.Msg {
 		return reportResultMsg{err: fmt.Errorf("failed to create directory: %w", err)}
 	}
 
-	// NEW: диагностические логи в ./logs/*.txt
 	if err := generateDiagnosticsLogs(absPath); err != nil {
-		// Я сделал так: если логи не снялись, это не убивает весь отчет, но мы честно падаем с ошибкой.
-		// Если хочешь "продолжать любой ценой", скажи, переделаю на warning.
 		return reportResultMsg{err: err}
 	}
 
-	// Генерируем отчеты
 	if err := generateTXTReport(absPath, tmpl, currentData); err != nil {
 		return reportResultMsg{err: err}
 	}
@@ -175,7 +167,7 @@ func generateReportCmd() tea.Msg {
 func runHealthCheck(tmpl models.SystemTemplate, data models.SystemInfo) []checkResult {
 	var results []checkResult
 
-	// 1. Проверка CPU Cores
+	// 1) CPU Cores
 	results = append(results, checkResult{
 		Name:     "CPU Cores",
 		Expected: fmt.Sprintf(">= %d", tmpl.CPU.MinCores),
@@ -183,7 +175,7 @@ func runHealthCheck(tmpl models.SystemTemplate, data models.SystemInfo) []checkR
 		Passed:   data.CPU.Cores >= tmpl.CPU.MinCores,
 	})
 
-	// 2. Проверка RAM
+	// 2) RAM
 	totalRAMGB := int(data.RAM.Total / 1024 / 1024 / 1024)
 	results = append(results, checkResult{
 		Name:     "Total RAM",
@@ -192,15 +184,16 @@ func runHealthCheck(tmpl models.SystemTemplate, data models.SystemInfo) []checkR
 		Passed:   totalRAMGB >= tmpl.RAM.MinTotalGB,
 	})
 
-	// 3. Проверка дисков
+	// 3) Disks: проверяем по физическим блочным устройствам (BlockDevs), а не по партициям (Disks)
 	for _, dt := range tmpl.Disks {
 		found := false
-		actualSize := 0
-		for _, ad := range data.Disks {
-			sizeGB := int(ad.Total / 1024 / 1024 / 1024)
-			if ad.Type == dt.Type && sizeGB >= dt.MinSizeGB {
+		actualSizeGB := 0
+
+		for _, bd := range data.BlockDevs {
+			sizeGB := int(bd.Size / 1024 / 1024 / 1024)
+			if bd.Type == dt.Type && sizeGB >= dt.MinSizeGB {
 				found = true
-				actualSize = sizeGB
+				actualSizeGB = sizeGB
 				break
 			}
 		}
@@ -209,7 +202,7 @@ func runHealthCheck(tmpl models.SystemTemplate, data models.SystemInfo) []checkR
 		results = append(results, checkResult{
 			Name:     statusName,
 			Expected: fmt.Sprintf(">= %d GB", dt.MinSizeGB),
-			Actual:   fmt.Sprintf("%d GB", actualSize),
+			Actual:   fmt.Sprintf("%d GB", actualSizeGB),
 			Passed:   found,
 		})
 	}
@@ -361,13 +354,11 @@ func generateDiagnosticsLogs(reportDir string) error {
 
 	var merr multiError
 
-	// Команды
 	merr.add(writeCommandOutput(ctx, logsDir, "dmesg.txt", "dmesg"))
 	merr.add(writeCommandOutput(ctx, logsDir, "lspci-k.txt", "lspci", "-k"))
 	merr.add(writeCommandOutput(ctx, logsDir, "lsusb.txt", "lsusb"))
 	merr.add(writeCommandOutput(ctx, logsDir, "lsblk.txt", "lsblk"))
 
-	// Файлы sysfs (как ты и попросил)
 	merr.add(writeFileContents(logsDir, "sys_vendor.txt", "/sys/class/dmi/id/sys_vendor"))
 	merr.add(writeFileContents(logsDir, "product_name.txt", "/sys/class/dmi/id/product_name"))
 	merr.add(writeFileContents(logsDir, "product_serial.txt", "/sys/class/dmi/id/product_serial"))
@@ -414,7 +405,6 @@ func writeCommandOutput(ctx context.Context, dir, outFile, name string, args ...
 	}
 
 	if err != nil {
-		// Ошибка тоже фиксируется в файле, но наружу возвращаем ее, чтобы ты видел, что конкретно не выполнилось.
 		sb.WriteString("----- ERROR -----\n")
 		sb.WriteString(err.Error())
 		sb.WriteString("\n")

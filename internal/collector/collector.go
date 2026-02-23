@@ -8,9 +8,9 @@ import (
 )
 
 var (
-	staticData   models.SystemInfo
-	physDiskData map[string]models.DiskInfo
-	once         sync.Once
+	staticData models.SystemInfo
+	physData   map[string]physDiskData
+	once       sync.Once
 )
 
 // сбор статических данных один раз, динамические при каждом вызове
@@ -28,8 +28,8 @@ func CollectAll() (models.SystemInfo, error) {
 		// информация о планках ОЗУ не меняется
 		staticData.RAM.Sticks = getPhysicalRAM()
 		// информация о дисках (модель, тип, износ)
-		physDiskData = getPhysicalDriveData()
-		staticData.BlockDevs = collectBlockDevices(physDiskData)
+		physData = getPhysicalDriveData()
+		staticData.BlockDevs = collectBlockDevices(physData)
 	})
 
 	// копирование статических данных для дальнейшего обновления динамических
