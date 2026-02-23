@@ -54,25 +54,6 @@ func (c cpuScreen) View() string {
 		s.WriteString("Serial Number: N/A\n")
 	}
 
-	// ===== Новые строки как на скрине =====
-	if c.data.CPU.HardwareVendor != "" {
-		s.WriteString(fmt.Sprintf("\nHardware vendor: %s\n", c.data.CPU.HardwareVendor))
-	} else {
-		s.WriteString("\nHardware vendor: N/A\n")
-	}
-
-	if c.data.CPU.HardwareModel != "" {
-		s.WriteString(fmt.Sprintf("Hardware model: %s\n", c.data.CPU.HardwareModel))
-	} else {
-		s.WriteString("Hardware model: N/A\n")
-	}
-
-	if c.data.CPU.HardwareSN != "" {
-		s.WriteString(fmt.Sprintf("Hardware S/N: %s\n", c.data.CPU.HardwareSN))
-	} else {
-		s.WriteString("Hardware S/N: N/A\n")
-	}
-
 	load := c.data.CPU.LoadPercent
 	bar := renderProgressBar(load, 30)
 

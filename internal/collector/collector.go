@@ -1,7 +1,10 @@
 package collector
 
 import (
+	"bufio"
+	"os"
 	"server-checker/internal/models"
+	"strings"
 	"sync"
 
 	"github.com/shirou/gopsutil/v3/host"
@@ -20,7 +23,7 @@ func CollectAll() (models.SystemInfo, error) {
 		h, _ := host.Info()
 		// системная информация (ос, ядро)
 		staticData.Host = models.HostInfo{
-			OS:     h.OS,
+			OS:     readOSRelease(),
 			Kernel: h.KernelVersion,
 		}
 		// CPU информация (модель, ядра, потоки)
@@ -47,4 +50,48 @@ func CollectAll() (models.SystemInfo, error) {
 	currentInfo.Host.Uptime = u
 
 	return currentInfo, nil
+}
+
+func readOSRelease() string {
+	f, err := os.Open("/etc/os-release")
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	var prettyName string
+	var name string
+	var version string
+
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		if strings.HasPrefix(line, "PRETTY_NAME=") {
+			prettyName = trimValue(line)
+		}
+		if strings.HasPrefix(line, "NAME=") {
+			name = trimValue(line)
+		}
+		if strings.HasPrefix(line, "VERSION=") {
+			version = trimValue(line)
+		}
+	}
+
+	if prettyName != "" {
+		return prettyName
+	}
+	if name != "" && version != "" {
+		return name + " " + version
+	}
+	return name
+}
+
+func trimValue(line string) string {
+	parts := strings.SplitN(line, "=", 2)
+	if len(parts) != 2 {
+		return ""
+	}
+	val := strings.Trim(parts[1], `"`)
+	return val
 }
