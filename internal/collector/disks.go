@@ -99,12 +99,52 @@ func getPhysicalDriveData() map[string]physDiskData {
 				}
 				sm.Close()
 			}
+		} else if strings.HasPrefix(name, "sd") {
+			// Логика для SATA (SSD/HDD)
+			if sm, err := smart.OpenSata(devPath); err == nil {
+				if data, err := sm.ReadSMARTData(); err == nil {
+					info.Status = "OK"
+					// Ищем атрибуты износа (Wear Level)
+					// 231 (SSD Life Left) или 177 (Wear Range Delta)
+					for _, attr := range data.Attrs {
+						if attr.Id == 231 || attr.Id == 177 || attr.Id == 233 {
+							// В SATA SMART 'Value' обычно показывает остаток здоровья (100 -> 0)
+							// Мы переводим это в процент износа (0 -> 100)
+							info.Wear = 100 - float64(attr.ValueRaw)
+						}
+						// Power On Hours для SATA
+						if attr.Id == 9 {
+							info.PowerOnHours = attr.ValueRaw
+						}
+						// Power Cycles для SATA
+						if attr.Id == 12 {
+							info.PowerCycles = attr.ValueRaw
+						}
+					}
+					info.Status = calculateStatus(info.Wear)
+				}
+				sm.Close()
+			}
 		}
 
 		driveMap[devPath] = info
 	}
 
 	return driveMap
+}
+
+// Вспомогательная функция для статуса
+func calculateStatus(wear float64) string {
+	if wear < 0 {
+		return "Unknown"
+	}
+	if wear > 80 {
+		return "Critical"
+	}
+	if wear > 50 {
+		return "Warning"
+	}
+	return "OK"
 }
 
 func collectBlockDevices(phys map[string]physDiskData) []models.BlockDeviceInfo {

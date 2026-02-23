@@ -464,6 +464,19 @@ func generateDiagnosticsLogs(reportDir string) error {
 	merr.add(writeCommandOutput(ctx, logsDir, "lsusb.txt", "lsusb"))
 	merr.add(writeCommandOutput(ctx, logsDir, "lsblk.txt", "lsblk"))
 
+	devices, _ := os.ReadDir("/sys/block")
+	for _, d := range devices {
+		name := d.Name()
+		// Пропускаем виртуальные устройства, петли и ram-диски
+		if strings.HasPrefix(name, "loop") || strings.HasPrefix(name, "ram") || strings.HasPrefix(name, "dm-") {
+			continue
+		}
+
+		devPath := "/dev/" + name
+		// Выгружаем smartctl -a для каждого диска
+		merr.add(writeCommandOutput(ctx, logsDir, "smart_"+name+".txt", "smartctl", "-a", devPath))
+	}
+
 	merr.add(writeFileContents(logsDir, "sys_vendor.txt", "/sys/class/dmi/id/sys_vendor"))
 	merr.add(writeFileContents(logsDir, "product_name.txt", "/sys/class/dmi/id/product_name"))
 	merr.add(writeFileContents(logsDir, "product_serial.txt", "/sys/class/dmi/id/product_serial"))
@@ -489,6 +502,13 @@ func writeCommandOutput(ctx context.Context, dir, outFile, name string, args ...
 	sb.WriteString(fmt.Sprintf("Timestamp: %s\n", start.Format(time.RFC3339)))
 	sb.WriteString(fmt.Sprintf("Command: %s\n", strings.Join(append([]string{name}, args...), " ")))
 	sb.WriteString(fmt.Sprintf("Duration: %s\n", duration))
+
+	// Добавляем код выхода для ясности
+	if err != nil {
+		sb.WriteString(fmt.Sprintf("Exit Code/Error: %v\n", err))
+	} else {
+		sb.WriteString("Exit Code: 0 (Success)\n")
+	}
 	sb.WriteString("==========================================\n\n")
 
 	if stdout.Len() > 0 {
@@ -509,19 +529,13 @@ func writeCommandOutput(ctx context.Context, dir, outFile, name string, args ...
 		sb.WriteString("\n")
 	}
 
-	if err != nil {
-		sb.WriteString("----- ERROR -----\n")
-		sb.WriteString(err.Error())
-		sb.WriteString("\n")
-	}
-
+	// Записываем файл на диск. Если запись удалась, возвращаем nil,
+	// даже если сама команда (например, smartctl) вернула ошибку.
 	if werr := os.WriteFile(fullPath, []byte(sb.String()), 0644); werr != nil {
 		return fmt.Errorf("failed to write %s: %w", fullPath, werr)
 	}
 
-	if err != nil {
-		return fmt.Errorf("command failed (%s): %w", outFile, err)
-	}
+	// Мы НЕ возвращаем err команды, так как лог уже сохранен и это не критично для генерации отчета.
 	return nil
 }
 
