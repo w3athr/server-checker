@@ -113,7 +113,14 @@ func collectBlockDevices(phys map[string]physDiskData) []models.BlockDeviceInfo 
 
 	for _, d := range devs {
 		name := d.Name()
-		if strings.HasPrefix(name, "loop") || strings.HasPrefix(name, "ram") {
+
+		if strings.HasPrefix(name, "loop") || strings.HasPrefix(name, "ram") || strings.HasPrefix(name, "dm-") {
+			continue
+		}
+		if isRemovable(name) {
+			continue
+		}
+		if !hasRealDevice(name) {
 			continue
 		}
 
@@ -165,4 +172,17 @@ func readBlockDevSizeBytes(sysName string) (uint64, error) {
 	}
 
 	return sectors * 512, nil
+}
+
+func isRemovable(sysName string) bool {
+	b, err := os.ReadFile(filepath.Join("/sys/block", sysName, "removable"))
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(string(b)) == "1"
+}
+
+func hasRealDevice(sysName string) bool {
+	_, err := os.Stat(filepath.Join("/sys/block", sysName, "device"))
+	return err == nil
 }

@@ -47,3 +47,11 @@ func formatBytes(bytes uint64) string {
 
 	return fmt.Sprintf("%.2fGB", float64(bytes)/float64(gb))
 }
+
+func gbToBytesDec(gb int) uint64 {
+	return uint64(gb) * 1000 * 1000 * 1000
+}
+
+func bytesToGBDec(b uint64) float64 {
+	return float64(b) / 1000 / 1000 / 1000
+}

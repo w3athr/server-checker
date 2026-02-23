@@ -167,47 +167,65 @@ func generateReportCmd() tea.Msg {
 func runHealthCheck(tmpl models.SystemTemplate, data models.SystemInfo) []checkResult {
 	var results []checkResult
 
-	// 1) CPU Cores
+	// 1. CPU
+	cpuPassed := data.CPU.Cores >= tmpl.CPU.MinCores && data.CPU.Speed >= tmpl.CPU.MinSpeed
 	results = append(results, checkResult{
-		Name:     "CPU Cores",
-		Expected: fmt.Sprintf(">= %d", tmpl.CPU.MinCores),
-		Actual:   fmt.Sprintf("%d", data.CPU.Cores),
-		Passed:   data.CPU.Cores >= tmpl.CPU.MinCores,
+		Name:     "CPU Config",
+		Expected: fmt.Sprintf("%d Cores @ %.1fGHz", tmpl.CPU.MinCores, tmpl.CPU.MinSpeed),
+		Actual:   fmt.Sprintf("%d Cores @ %.1fGHz", data.CPU.Cores, data.CPU.Speed),
+		Passed:   cpuPassed,
 	})
 
-	// 2) RAM
-	totalRAMGB := int(data.RAM.Total / 1024 / 1024 / 1024)
+	// 2. RAM
+	actualRAM := bytesToGBDec(data.RAM.Total)
+	ramPassed := actualRAM >= float64(tmpl.RAM.MinTotalGB)-1.0 // Допуск 1ГБ на резервацию ядром
 	results = append(results, checkResult{
 		Name:     "Total RAM",
 		Expected: fmt.Sprintf(">= %d GB", tmpl.RAM.MinTotalGB),
-		Actual:   fmt.Sprintf("%d GB", totalRAMGB),
-		Passed:   totalRAMGB >= tmpl.RAM.MinTotalGB,
+		Actual:   fmt.Sprintf("%.1f GB", actualRAM),
+		Passed:   ramPassed,
 	})
 
-	// 3) Disks: проверяем по физическим блочным устройствам (BlockDevs), а не по партициям (Disks)
-	for _, dt := range tmpl.Disks {
-		found := false
-		actualSizeGB := 0
-
-		for _, bd := range data.BlockDevs {
-			sizeGB := int(bd.Size / 1024 / 1024 / 1024)
-			if bd.Type == dt.Type && sizeGB >= dt.MinSizeGB {
-				found = true
-				actualSizeGB = sizeGB
-				break
-			}
+	// 3. Disks (Считаем сколько дисков нужного типа и размера)
+	validDisks := 0
+	for _, bd := range data.BlockDevs {
+		if diskTypeMatches(bd.Type, tmpl.Disks.Type) && bytesToGBDec(bd.Size) >= float64(tmpl.Disks.MinSizeGB) {
+			validDisks++
 		}
-
-		statusName := fmt.Sprintf("Disk: %s (%s)", dt.Name, dt.Type)
-		results = append(results, checkResult{
-			Name:     statusName,
-			Expected: fmt.Sprintf(">= %d GB", dt.MinSizeGB),
-			Actual:   fmt.Sprintf("%d GB", actualSizeGB),
-			Passed:   found,
-		})
 	}
+	results = append(results, checkResult{
+		Name:     fmt.Sprintf("Storage (%s)", tmpl.Disks.Type),
+		Expected: fmt.Sprintf("%d drives >= %d GB", tmpl.Disks.MinCount, tmpl.Disks.MinSizeGB),
+		Actual:   fmt.Sprintf("%d drives detected", validDisks),
+		Passed:   validDisks >= tmpl.Disks.MinCount,
+	})
+
+	// 4. Network (Считаем общее кол-во интерфейсов)
+	totalNICs := len(data.Network)
+	results = append(results, checkResult{
+		Name:     "Network Interfaces",
+		Expected: fmt.Sprintf("%d ports", tmpl.Network.MinTotalNICs),
+		Actual:   fmt.Sprintf("%d ports detected", totalNICs),
+		Passed:   totalNICs >= tmpl.Network.MinTotalNICs,
+	})
 
 	return results
+}
+
+func diskTypeMatches(actual, expected string) bool {
+	a := strings.ToUpper(strings.TrimSpace(actual))
+	e := strings.ToUpper(strings.TrimSpace(expected))
+
+	if a == e {
+		return true
+	}
+
+	// NVMe как подтип SSD
+	if e == "SSD" && a == "NVME" {
+		return true
+	}
+
+	return false
 }
 
 func generateTXTReport(dir string, tmpl models.SystemTemplate, data models.SystemInfo) error {
@@ -266,61 +284,148 @@ func generateYAMLReport(dir string, tmpl models.SystemTemplate, data models.Syst
 func generateHTMLReport(dir string, tmpl models.SystemTemplate, data models.SystemInfo) error {
 	results := runHealthCheck(tmpl, data)
 
-	htmlHeader := `
-	<html>
-	<head>
-		<meta charset="UTF-8">
-		<style>
-			body { font-family: sans-serif; margin: 40px; background: #f4f4f9; }
-			table { width: 100%; border-collapse: collapse; background: white; }
-			th, td { padding: 12px; border: 1px solid #ddd; text-align: left; }
-			th { background-color: #4CAF50; color: white; }
-			.pass { color: green; font-weight: bold; }
-			.fail { color: red; font-weight: bold; }
-			.header { margin-bottom: 20px; }
-		</style>
-	</head>
-	<body>
-		<div class="header">
-			<h1>Health Check: ` + tmpl.Name + `</h1>
-			<p>Generated on: ` + time.Now().Format(time.RFC1123) + `</p>
-		</div>
-		<table>
-			<tr>
-				<th>Parameter</th>
-				<th>Expected</th>
-				<th>Actual</th>
-				<th>Status</th>
-			</tr>`
+	// Основной стиль и заголовок
+	html := `<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="UTF-8">
+	<title>Health Check Report - ` + tmpl.Name + `</title>
+	<style>
+		body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 40px; background: #f8f9fa; color: #333; }
+		.container { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+		h1 { color: #2c3e50; border-bottom: 2px solid #eee; padding-bottom: 10px; }
+		h2 { color: #2c3e50; margin-top: 40px; background: #e9ecef; padding: 10px; border-radius: 4px; }
+		h3 { color: #7f8c8d; border-left: 4px solid #3498db; padding-left: 10px; margin-top: 25px; }
+		table { width: 100%; border-collapse: collapse; margin-top: 10px; margin-bottom: 20px; }
+		th, td { padding: 12px; border: 1px solid #dee2e6; text-align: left; }
+		th { background-color: #f1f1f1; font-weight: 600; }
+		.pass { color: #27ae60; font-weight: bold; background: #ebfaef; text-align: center; }
+		.fail { color: #c0392b; font-weight: bold; background: #fdf2f2; text-align: center; }
+		.val { font-family: monospace; background: #f8f9fa; padding: 2px 4px; border-radius: 3px; }
+		.footer { margin-top: 50px; font-size: 0.9em; color: #95a5a6; text-align: center; }
+	</style>
+</head>
+<body>
+<div class="container">
+	<h1>Hardware Health Check: ` + tmpl.Name + `</h1>
+	<p><strong>Generated on:</strong> ` + time.Now().Format(time.RFC1123) + `</p>
+	<p><strong>Platform Description:</strong> ` + tmpl.Description + `</p>
 
-	var rows string
+	<h2>1. Validation Results</h2>
+	<table>
+		<tr>
+			<th>Check Parameter</th>
+			<th>Expected Value</th>
+			<th>Actual Value</th>
+			<th style="width: 100px;">Status</th>
+		</tr>`
+
+	// 1. Таблица результатов проверки
 	for _, r := range results {
 		statusClass := "pass"
-		statusText := "OK"
+		statusText := "PASS"
 		if !r.Passed {
 			statusClass = "fail"
-			statusText = "FAIL"
+			statusText := "FAIL"
+			_ = statusText // просто для ясности
 		}
-		rows += fmt.Sprintf(`
-			<tr>
-				<td>%s</td>
-				<td>%s</td>
-				<td>%s</td>
-				<td class="%s">%s</td>
-			</tr>`, r.Name, r.Expected, r.Actual, statusClass, statusText)
+		if !r.Passed {
+			statusText = "FAIL"
+		} else {
+			statusText = "OK"
+		}
+
+		html += fmt.Sprintf(`
+		<tr>
+			<td>%s</td>
+			<td class="val">%s</td>
+			<td class="val">%s</td>
+			<td class="%s">%s</td>
+		</tr>`, r.Name, r.Expected, r.Actual, statusClass, statusText)
 	}
 
-	footer := `</table></body></html>`
+	html += `</table>`
 
-	return os.WriteFile(filepath.Join(dir, "report.html"), []byte(htmlHeader+rows+footer), 0644)
+	// 2. Секция подробностей (Inventory)
+	html += `<h2>2. Detailed System Inventory</h2>`
+
+	// Общая инфо
+	html += `<h3>System Information</h3>
+	<table>
+		<tr><th>Host S/N</th><td class="val">` + data.CPU.HardwareSN + `</td></tr>
+		<tr><th>Motherboard</th><td class="val">` + data.CPU.Motherboard + ` (` + data.CPU.MotherboardSerial + `)</td></tr>
+		<tr><th>OS / Kernel</th><td>` + data.Host.OS + ` / ` + data.Host.Kernel + `</td></tr>
+	</table>`
+
+	// Процессор
+	html += `<h3>CPU Details</h3>
+	<table>
+		<tr><th>Model</th><td class="val">` + data.CPU.Model + `</td></tr>
+		<tr><th>Cores / Threads</th><td>` + fmt.Sprintf("%d / %d", data.CPU.Cores, data.CPU.Threads) + `</td></tr>
+	</table>`
+
+	// Сеть
+	html += `<h3>Network Interfaces</h3>
+	<table>
+		<tr>
+			<th>Interface</th>
+			<th>Model</th>
+			<th>MAC Address</th>
+			<th>Max Speed</th>
+			<th>Current Status</th>
+		</tr>`
+	for _, n := range data.Network {
+		html += fmt.Sprintf(`
+		<tr>
+			<td class="val"><b>%s</b></td>
+			<td>%s</td>
+			<td class="val">%s</td>
+			<td>%d Mbps</td>
+			<td>%s</td>
+		</tr>`, n.Interface, n.Model, n.MAC, n.MaxSpeedMbps, n.Status)
+	}
+	html += `</table>`
+
+	// Диски
+	html += `<h3>Storage Devices</h3>
+	<table>
+		<tr>
+			<th>Device</th>
+			<th>Model</th>
+			<th>Type</th>
+			<th>Size</th>
+			<th>Health Status</th>
+			<th>Wear Level</th>
+		</tr>`
+	for _, d := range data.BlockDevs {
+		wearStr := "N/A"
+		if d.Wear >= 0 {
+			wearStr = fmt.Sprintf("%.0f%%", d.Wear)
+		}
+		html += fmt.Sprintf(`
+		<tr>
+			<td class="val">%s</td>
+			<td>%s</td>
+			<td>%s</td>
+			<td>%.1f GB</td>
+			<td>%s</td>
+			<td>%s</td>
+		</tr>`, d.Device, d.Model, d.Type, bytesToGBDec(d.Size), d.Status, wearStr)
+	}
+	html += `</table>`
+
+	html += `
+	<div class="footer">
+		Server Checker Tool v1.0 | Automating Hardware Validation
+	</div>
+</div>
+</body>
+</html>`
+
+	return os.WriteFile(filepath.Join(dir, "report.html"), []byte(html), 0644)
 }
 
-/*
-	========================
-	NEW: diagnostics logs
-	========================
-*/
-
+// Диаг. логи
 type multiError struct {
 	errs []error
 }
