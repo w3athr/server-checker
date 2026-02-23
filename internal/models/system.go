@@ -17,6 +17,9 @@ type CPUInfo struct {
 	Threads           int     // потоки
 	Speed             float64 // в ГГц
 	LoadPercent       float64 // текущая загрузка в процентах
+	HardwareVendor    string
+	HardwareModel     string
+	HardwareSN        string
 }
 
 type RAMStick struct {

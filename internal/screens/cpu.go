@@ -30,37 +30,56 @@ func (c cpuScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (c cpuScreen) View() string {
-	if c.data.CPU.Model == "" { // если данные еще не пришли
+	if c.data.CPU.Model == "" {
 		return "Loading CPU data...\n\nPress ESC to return to menu."
 	}
 
 	var s strings.Builder
 
-	s.WriteString("CPU and MotherBoard Information" + "\n\n")
+	s.WriteString("CPU and MotherBoard Information\n\n")
 
-	s.WriteString(fmt.Sprintf("%s: %s\n", "Model", c.data.CPU.Model))
-
-	s.WriteString(fmt.Sprintf("%s %d Cores / %d Threads\n", "Cores:", c.data.CPU.Cores, c.data.CPU.Threads))
-	s.WriteString(fmt.Sprintf("%s %.2f GHz\n", "Speed:", c.data.CPU.Speed))
+	s.WriteString(fmt.Sprintf("Model: %s\n", c.data.CPU.Model))
+	s.WriteString(fmt.Sprintf("Cores: %d Cores / %d Threads\n", c.data.CPU.Cores, c.data.CPU.Threads))
+	s.WriteString(fmt.Sprintf("Speed: %.2f GHz\n", c.data.CPU.Speed))
 
 	if c.data.CPU.Motherboard != "" {
-		s.WriteString(fmt.Sprintf("%s %s\n", "\nMotherBoard:", c.data.CPU.Motherboard))
+		s.WriteString(fmt.Sprintf("\nMotherBoard: %s\n", c.data.CPU.Motherboard))
 	} else {
-		s.WriteString("MotherBoard: N/A\n")
+		s.WriteString("\nMotherBoard: N/A\n")
 	}
+
 	if c.data.CPU.MotherboardSerial != "" {
-		s.WriteString(fmt.Sprintf("%s %s\n", "Serial Number:", c.data.CPU.MotherboardSerial))
+		s.WriteString(fmt.Sprintf("Serial Number: %s\n", c.data.CPU.MotherboardSerial))
 	} else {
 		s.WriteString("Serial Number: N/A\n")
 	}
 
-	load := c.data.CPU.LoadPercent // простой прогресс-бар для загрузки
+	// ===== Новые строки как на скрине =====
+	if c.data.CPU.HardwareVendor != "" {
+		s.WriteString(fmt.Sprintf("\nHardware vendor: %s\n", c.data.CPU.HardwareVendor))
+	} else {
+		s.WriteString("\nHardware vendor: N/A\n")
+	}
+
+	if c.data.CPU.HardwareModel != "" {
+		s.WriteString(fmt.Sprintf("Hardware model: %s\n", c.data.CPU.HardwareModel))
+	} else {
+		s.WriteString("Hardware model: N/A\n")
+	}
+
+	if c.data.CPU.HardwareSN != "" {
+		s.WriteString(fmt.Sprintf("Hardware S/N: %s\n", c.data.CPU.HardwareSN))
+	} else {
+		s.WriteString("Hardware S/N: N/A\n")
+	}
+
+	load := c.data.CPU.LoadPercent
 	bar := renderProgressBar(load, 30)
 
-	s.WriteString("\n" + "Current Load: " + fmt.Sprintf("%.2f%%", load) + "\n")
+	s.WriteString("\nCurrent Load: " + fmt.Sprintf("%.2f%%", load) + "\n")
 	s.WriteString(bar + "\n\n")
 
-	s.WriteString("\n" + "Q: Menu")
+	s.WriteString("Q: Menu")
 
 	return s.String()
 }
