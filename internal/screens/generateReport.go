@@ -11,6 +11,7 @@ import (
 	"server-checker/internal/models"
 	"server-checker/internal/templates"
 	"strings"
+	"text/template"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -168,42 +169,42 @@ func runHealthCheck(tmpl models.SystemTemplate, data models.SystemInfo) []checkR
 	var results []checkResult
 
 	// 1. CPU
-	cpuPassed := data.CPU.Cores >= tmpl.CPU.MinCores && data.CPU.Speed >= tmpl.CPU.MinSpeed
+	cpuOk := data.CPU.Cores >= tmpl.CPU.MinCores && data.CPU.Speed >= tmpl.CPU.MinSpeed
 	results = append(results, checkResult{
-		Name:     "CPU Config",
+		Name:     "CPU Configuration",
 		Expected: fmt.Sprintf("%d Cores @ %.1fGHz", tmpl.CPU.MinCores, tmpl.CPU.MinSpeed),
 		Actual:   fmt.Sprintf("%d Cores @ %.1fGHz", data.CPU.Cores, data.CPU.Speed),
-		Passed:   cpuPassed,
+		Passed:   cpuOk,
 	})
 
 	// 2. RAM
 	actualRAM := bytesToGBDec(data.RAM.Total)
-	ramPassed := actualRAM >= float64(tmpl.RAM.MinTotalGB)-1.0 // Допуск 1ГБ на резервацию ядром
+	ramOk := actualRAM >= float64(tmpl.RAM.MinTotalGB)-1.0 // допуск 1ГБ
 	results = append(results, checkResult{
-		Name:     "Total RAM",
+		Name:     "Total RAM Capacity",
 		Expected: fmt.Sprintf(">= %d GB", tmpl.RAM.MinTotalGB),
 		Actual:   fmt.Sprintf("%.1f GB", actualRAM),
-		Passed:   ramPassed,
+		Passed:   ramOk,
 	})
 
-	// 3. Disks (Считаем сколько дисков нужного типа и размера)
+	// 3. Диски (считаем количество подходящих)
 	validDisks := 0
 	for _, bd := range data.BlockDevs {
-		if diskTypeMatches(bd.Type, tmpl.Disks.Type) && bytesToGBDec(bd.Size) >= float64(tmpl.Disks.MinSizeGB) {
+		if diskTypeMatches(bd.Type, tmpl.Disks.Type) && bytesToGBDec(bd.Size) >= float64(tmpl.Disks.MinSizeGB)-5.0 {
 			validDisks++
 		}
 	}
 	results = append(results, checkResult{
-		Name:     fmt.Sprintf("Storage (%s)", tmpl.Disks.Type),
-		Expected: fmt.Sprintf("%d drives >= %d GB", tmpl.Disks.MinCount, tmpl.Disks.MinSizeGB),
+		Name:     fmt.Sprintf("Storage Devices (%s)", tmpl.Disks.Type),
+		Expected: fmt.Sprintf("%d drives x %d GB", tmpl.Disks.MinCount, tmpl.Disks.MinSizeGB),
 		Actual:   fmt.Sprintf("%d drives detected", validDisks),
 		Passed:   validDisks >= tmpl.Disks.MinCount,
 	})
 
-	// 4. Network (Считаем общее кол-во интерфейсов)
+	// 4. Сеть (общее кол-во)
 	totalNICs := len(data.Network)
 	results = append(results, checkResult{
-		Name:     "Network Interfaces",
+		Name:     "Total Network Ports",
 		Expected: fmt.Sprintf("%d ports", tmpl.Network.MinTotalNICs),
 		Actual:   fmt.Sprintf("%d ports detected", totalNICs),
 		Passed:   totalNICs >= tmpl.Network.MinTotalNICs,
@@ -282,147 +283,222 @@ func generateYAMLReport(dir string, tmpl models.SystemTemplate, data models.Syst
 }
 
 func generateHTMLReport(dir string, tmpl models.SystemTemplate, data models.SystemInfo) error {
-	results := runHealthCheck(tmpl, data)
-
-	// Основной стиль и заголовок
-	html := `<!DOCTYPE html>
+	const htmlLayout = `
+<!DOCTYPE html>
 <html>
 <head>
 	<meta charset="UTF-8">
-	<title>Health Check Report - ` + tmpl.Name + `</title>
 	<style>
-		body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 40px; background: #f8f9fa; color: #333; }
-		.container { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-		h1 { color: #2c3e50; border-bottom: 2px solid #eee; padding-bottom: 10px; }
-		h2 { color: #2c3e50; margin-top: 40px; background: #e9ecef; padding: 10px; border-radius: 4px; }
-		h3 { color: #7f8c8d; border-left: 4px solid #3498db; padding-left: 10px; margin-top: 25px; }
-		table { width: 100%; border-collapse: collapse; margin-top: 10px; margin-bottom: 20px; }
-		th, td { padding: 12px; border: 1px solid #dee2e6; text-align: left; }
-		th { background-color: #f1f1f1; font-weight: 600; }
-		.pass { color: #27ae60; font-weight: bold; background: #ebfaef; text-align: center; }
-		.fail { color: #c0392b; font-weight: bold; background: #fdf2f2; text-align: center; }
-		.val { font-family: monospace; background: #f8f9fa; padding: 2px 4px; border-radius: 3px; }
-		.footer { margin-top: 50px; font-size: 0.9em; color: #95a5a6; text-align: center; }
+		body { 
+			font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+			margin: 40px; 
+			background: #f0f2f5; 
+			color: #000; 
+		}
+		
+		/* Лист отчета с закругленными углами */
+		.card { 
+			background: white; 
+			padding: 40px; 
+			max-width: 1000px; 
+			margin: auto; 
+			border: 1px solid #e1e4e8;
+			border-radius: 12px;
+			box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+		}
+
+		h1 { color: #2c3e50; border-bottom: 2px solid #eee; padding-bottom: 10px; margin-top: 0; }
+		
+		/* Главные подразделы: Темный фон и закругления */
+		h2 { 
+			background: #34495e; 
+			color: white; 
+			padding: 10px 15px; 
+			border-radius: 8px; 
+			margin-top: 35px; 
+			font-size: 1.1em; 
+		}
+
+		/* Второстепенные заголовки: Просто жирный черный текст */
+		h3 { 
+			color: #000; 
+			margin-top: 25px; 
+			margin-bottom: 10px; 
+			font-weight: bold;
+			font-size: 1.1em;
+		}
+
+		table { width: 100%; border-collapse: collapse; margin: 10px 0; background: white; }
+		th, td { padding: 12px; border: 1px solid #eee; text-align: left; }
+		th { background-color: #f8f9fa; font-weight: bold; color: #555; }
+
+		/* Стилизация статусов (плашки как на скриншоте слева) */
+		.status-cell { text-align: center; width: 80px; }
+		
+		.pass { 
+			background-color: #d4edda; 
+			color: #155724; 
+			font-weight: bold; 
+			padding: 6px 12px; 
+			border-radius: 6px;
+			display: inline-block;
+			min-width: 50px;
+		}
+		
+		.fail { 
+			background-color: #f8d7da; 
+			color: #721c24; 
+			font-weight: bold; 
+			padding: 6px 12px; 
+			border-radius: 6px;
+			display: inline-block;
+			min-width: 50px;
+		}
+
+		.val { font-family: inherit; }
+
+		.footer { text-align: center; margin-top: 50px; color: #999; font-size: 0.8em; border-top: 1px solid #eee; padding-top: 20px; }
+		.spec-label { font-weight: bold; color: #666; width: 220px; background: #fafafa; }
 	</style>
 </head>
 <body>
-<div class="container">
-	<h1>Hardware Health Check: ` + tmpl.Name + `</h1>
-	<p><strong>Generated on:</strong> ` + time.Now().Format(time.RFC1123) + `</p>
-	<p><strong>Platform Description:</strong> ` + tmpl.Description + `</p>
+	<div class="card">
+		<h1>Hardware Health Report: {{.Template.Name}}</h1>
+		<p><strong>Validation Template:</strong> {{.Template.Description}}</p>
+		<p><strong>Report Date:</strong> {{.Timestamp}}</p>
 
-	<h2>1. Validation Results</h2>
-	<table>
-		<tr>
-			<th>Check Parameter</th>
-			<th>Expected Value</th>
-			<th>Actual Value</th>
-			<th style="width: 100px;">Status</th>
-		</tr>`
+		<h2>1. Validation Summary</h2>
+		<table>
+			<thead>
+				<tr><th>Check Parameter</th><th>Expected</th><th>Actual</th><th class="status-cell">Result</th></tr>
+			</thead>
+			<tbody>
+				{{range .Results}}
+				<tr>
+					<td>{{.Name}}</td>
+					<td class="val">{{.Expected}}</td>
+					<td class="val">{{.Actual}}</td>
+					<td class="status-cell">
+						<span class="{{if .Passed}}pass{{else}}fail{{end}}">
+							{{if .Passed}}OK{{else}}FAIL{{end}}
+						</span>
+					</td>
+				</tr>
+				{{end}}
+			</tbody>
+		</table>
 
-	// 1. Таблица результатов проверки
-	for _, r := range results {
-		statusClass := "pass"
-		statusText := "PASS"
-		if !r.Passed {
-			statusClass = "fail"
-			statusText := "FAIL"
-			_ = statusText // просто для ясности
-		}
-		if !r.Passed {
-			statusText = "FAIL"
-		} else {
-			statusText = "OK"
-		}
+		<h2>2. System Inventory</h2>
+		
+		<h3>Platform Information</h3>
+		<table>
+			<tr><td class="spec-label">Hardware Vendor</td><td>{{if .Data.CPU.HardwareVendor}}{{.Data.CPU.HardwareVendor}}{{else}}Default string{{end}}</td></tr>
+			<tr><td class="spec-label">Product Model</td><td>{{if .Data.CPU.HardwareModel}}{{.Data.CPU.HardwareModel}}{{else}}Default string{{end}}</td></tr>
+			<tr><td class="spec-label">System Serial Number</td><td class="code">{{.Data.CPU.HardwareSN}}</td></tr>
+			<tr><td class="spec-label">Motherboard</td><td>{{.Data.CPU.Motherboard}} (S/N: {{.Data.CPU.MotherboardSerial}})</td></tr>
+			<tr><td class="spec-label">Operating System</td><td>{{.Data.Host.OS}}</td></tr>
+			<tr><td class="spec-label">Kernel Version</td><td>{{.Data.Host.Kernel}}</td></tr>
+		</table>
 
-		html += fmt.Sprintf(`
-		<tr>
-			<td>%s</td>
-			<td class="val">%s</td>
-			<td class="val">%s</td>
-			<td class="%s">%s</td>
-		</tr>`, r.Name, r.Expected, r.Actual, statusClass, statusText)
-	}
+		<h3>Processor (CPU)</h3>
+		<table>
+			<tr><td class="spec-label">Model Name</td><td>{{.Data.CPU.Model}}</td></tr>
+			<tr><td class="spec-label">Architecture</td><td>{{.Data.CPU.Cores}} Cores / {{.Data.CPU.Threads}} Threads</td></tr>
+			<tr><td class="spec-label">Current Frequency</td><td>{{printf "%.2f" .Data.CPU.Speed}} GHz</td></tr>
+		</table>
 
-	html += `</table>`
+		<h3>Memory (RAM)</h3>
+		<p style="margin-left: 5px;"><strong>Total Capacity:</strong> {{bytesToGB .Data.RAM.Total}} GB</p>
+		<table>
+			<thead>
+				<tr><th>Slot / Locator</th><th>Module Model</th><th>Capacity</th><th>Speed</th></tr>
+			</thead>
+			<tbody>
+				{{range .Data.RAM.Sticks}}
+				<tr>
+					<td>{{.Slot}}</td>
+					<td>{{.Model}}</td>
+					<td>{{bytesToGB .Capacity}} GB</td>
+					<td>{{.Speed}} MT/s</td>
+				</tr>
+				{{else}}
+				<tr><td colspan="4" style="text-align:center; color:#999;">Physical RAM details not available</td></tr>
+				{{end}}
+			</tbody>
+		</table>
 
-	// 2. Секция подробностей (Inventory)
-	html += `<h2>2. Detailed System Inventory</h2>`
+		<h3>Network Adapters</h3>
+		<table>
+			<thead>
+				<tr><th>Interface</th><th>Hardware Model</th><th>MAC Address</th><th>Max Speed</th></tr>
+			</thead>
+			<tbody>
+				{{range .Data.Network}}
+				<tr>
+					<td><strong>{{.Interface}}</strong></td>
+					<td>{{.Model}}</td>
+					<td class="code">{{.MAC}}</td>
+					<td>{{.MaxSpeedMbps}} Mbps</td>
+				</tr>
+				{{end}}
+			</tbody>
+		</table>
 
-	// Общая инфо
-	html += `<h3>System Information</h3>
-	<table>
-		<tr><th>Host S/N</th><td class="val">` + data.CPU.HardwareSN + `</td></tr>
-		<tr><th>Motherboard</th><td class="val">` + data.CPU.Motherboard + ` (` + data.CPU.MotherboardSerial + `)</td></tr>
-		<tr><th>OS / Kernel</th><td>` + data.Host.OS + ` / ` + data.Host.Kernel + `</td></tr>
-	</table>`
+		<h3>Storage Devices</h3>
+		<table>
+			<thead>
+				<tr><th>Device</th><th>Model / Firmware</th><th>Type</th><th>Size</th><th>Wear Level</th><th>Status</th></tr>
+			</thead>
+			<tbody>
+				{{range .Data.BlockDevs}}
+				<tr>
+					<td class="code">{{.Device}}</td>
+					<td>{{.Model}}</td>
+					<td>{{.Type}}</td>
+					<td>{{bytesToGB .Size}} GB</td>
+					<td>{{if ge .Wear 0.0}}{{.Wear}}%{{else}}N/A{{end}}</td>
+					<td style="font-weight:bold;">{{.Status}}</td>
+				</tr>
+				{{end}}
+			</tbody>
+		</table>
 
-	// Процессор
-	html += `<h3>CPU Details</h3>
-	<table>
-		<tr><th>Model</th><td class="val">` + data.CPU.Model + `</td></tr>
-		<tr><th>Cores / Threads</th><td>` + fmt.Sprintf("%d / %d", data.CPU.Cores, data.CPU.Threads) + `</td></tr>
-	</table>`
-
-	// Сеть
-	html += `<h3>Network Interfaces</h3>
-	<table>
-		<tr>
-			<th>Interface</th>
-			<th>Model</th>
-			<th>MAC Address</th>
-			<th>Max Speed</th>
-			<th>Current Status</th>
-		</tr>`
-	for _, n := range data.Network {
-		html += fmt.Sprintf(`
-		<tr>
-			<td class="val"><b>%s</b></td>
-			<td>%s</td>
-			<td class="val">%s</td>
-			<td>%d Mbps</td>
-			<td>%s</td>
-		</tr>`, n.Interface, n.Model, n.MAC, n.MaxSpeedMbps, n.Status)
-	}
-	html += `</table>`
-
-	// Диски
-	html += `<h3>Storage Devices</h3>
-	<table>
-		<tr>
-			<th>Device</th>
-			<th>Model</th>
-			<th>Type</th>
-			<th>Size</th>
-			<th>Health Status</th>
-			<th>Wear Level</th>
-		</tr>`
-	for _, d := range data.BlockDevs {
-		wearStr := "N/A"
-		if d.Wear >= 0 {
-			wearStr = fmt.Sprintf("%.0f%%", d.Wear)
-		}
-		html += fmt.Sprintf(`
-		<tr>
-			<td class="val">%s</td>
-			<td>%s</td>
-			<td>%s</td>
-			<td>%.1f GB</td>
-			<td>%s</td>
-			<td>%s</td>
-		</tr>`, d.Device, d.Model, d.Type, bytesToGBDec(d.Size), d.Status, wearStr)
-	}
-	html += `</table>`
-
-	html += `
-	<div class="footer">
-		Server Checker Tool v1.0 | Automating Hardware Validation
+		<div class="footer">
+			Server Checker Tool v1.2 | Hardware Validation System
+		</div>
 	</div>
-</div>
 </body>
 </html>`
 
-	return os.WriteFile(filepath.Join(dir, "report.html"), []byte(html), 0644)
+	// Остальная часть функции без изменений
+	reportData := struct {
+		Template  models.SystemTemplate
+		Data      models.SystemInfo
+		Results   []checkResult
+		Timestamp string
+	}{
+		Template:  tmpl,
+		Data:      data,
+		Results:   runHealthCheck(tmpl, data),
+		Timestamp: time.Now().Format(time.RFC1123),
+	}
+
+	t, err := template.New("report").Funcs(template.FuncMap{
+		"bytesToGB": func(b uint64) string {
+			return fmt.Sprintf("%.1f", float64(b)/1000/1000/1000)
+		},
+	}).Parse(htmlLayout)
+
+	if err != nil {
+		return fmt.Errorf("failed to parse template: %w", err)
+	}
+
+	var buf bytes.Buffer
+	if err := t.Execute(&buf, reportData); err != nil {
+		return fmt.Errorf("failed to execute template: %w", err)
+	}
+
+	return os.WriteFile(filepath.Join(dir, "report.html"), buf.Bytes(), 0644)
 }
 
 // Диаг. логи

@@ -1,12 +1,13 @@
 package models
 
+// SystemTemplate описывает эталонную конфигурацию ПАК.
 type SystemTemplate struct {
 	Name        string          `yaml:"name"`
 	Description string          `yaml:"description"`
 	CPU         CPUTemplate     `yaml:"cpu"`
 	RAM         RAMTemplate     `yaml:"ram"`
-	Disks       DiskTemplate    `yaml:"disks"`   // Изменили структуру для массовой проверки
-	Network     NetworkTemplate `yaml:"network"` // Изменили структуру
+	Disks       DiskTemplate    `yaml:"disks"`
+	Network     NetworkTemplate `yaml:"network"`
 }
 
 type CPUTemplate struct {
@@ -20,12 +21,11 @@ type RAMTemplate struct {
 }
 
 type DiskTemplate struct {
-	MinCount  int    `yaml:"min_count"`
-	MinSizeGB int    `yaml:"min_size_gb"`
-	Type      string `yaml:"type"` // SSD, HDD, NVMe
+	MinCount  int    `yaml:"min_count"`   // Сколько дисков должно быть
+	MinSizeGB int    `yaml:"min_size_gb"` // Минимальный размер каждого
+	Type      string `yaml:"type"`        // SSD, NVMe
 }
 
 type NetworkTemplate struct {
-	MinTotalNICs int `yaml:"min_total_nics"`
-	MinSpeedMbps int `yaml:"min_speed_mbps"` // Минимальная скорость основного пула портов
+	MinTotalNICs int `yaml:"min_total_nics"` // Общее кол-во портов
 }

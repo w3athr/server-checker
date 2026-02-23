@@ -11,47 +11,62 @@ import (
 )
 
 var (
-	staticData models.SystemInfo
-	physData   map[string]physDiskData
+	// Используем одно имя переменной для кэша, чтобы не путаться
+	cache      models.SystemInfo
+	cacheMutex sync.RWMutex
 	once       sync.Once
 )
 
-// сбор статических данных один раз, динамические при каждом вызове
+// CollectAll теперь разделяет статику и динамику
 func CollectAll() (models.SystemInfo, error) {
 
-	once.Do(func() { // sync.Once - выполнение только один раз
+	once.Do(func() {
+		// --- СТАТИЧЕСКИЕ ДАННЫЕ (собираем 1 раз) ---
 		h, _ := host.Info()
-		// системная информация (ос, ядро)
-		staticData.Host = models.HostInfo{
+
+		cache.Host = models.HostInfo{
 			OS:     readOSRelease(),
 			Kernel: h.KernelVersion,
 		}
-		// CPU информация (модель, ядра, потоки)
-		staticData.CPU = collectCPUStatic()
-		// информация о планках ОЗУ не меняется
-		staticData.RAM.Sticks = getPhysicalRAM()
-		// информация о дисках (модель, тип, износ)
-		physData = getPhysicalDriveData()
-		staticData.BlockDevs = collectBlockDevices(physData)
+
+		// Информация о железе
+		cache.CPU = collectCPUStatic()
+		cache.RAM.Sticks = getPhysicalRAM()
+
+		// Диски (модели и SMART SATA/NVMe собираем один раз при старте)
+		pData := getPhysicalDriveData()
+		cache.BlockDevs = collectBlockDevices(pData)
+
+		// Сеть (статическая часть: модели PCI, MAC, Макс. скорость)
+		cache.Network = collectNetworkStatic()
 	})
 
-	// копирование статических данных для дальнейшего обновления динамических
-	currentInfo := staticData
-	// динамические данные CPU (нагрузка)
-	currentInfo.CPU.LoadPercent = collectCPULoad()
-	// динамические данные RAM (занято, свободно)
-	currentInfo.RAM = updateRAMDynamic(currentInfo.RAM)
-	// динамические данные дисков (занято, свободно)
-	currentInfo.Disks = collectDisks()
-	// динамические данные сети (статусы, ip)
-	currentInfo.Network = collectNetwork()
-	// время работы системы
-	u, _ := host.Uptime()
-	currentInfo.Host.Uptime = u
+	// Блокируем кэш для обновления динамических данных
+	cacheMutex.Lock()
+	defer cacheMutex.Unlock()
 
-	return currentInfo, nil
+	// --- ДИНАМИЧЕСКИЕ ДАННЫЕ (каждую секунду) ---
+
+	// CPU нагрузка
+	cache.CPU.LoadPercent = collectCPULoad()
+
+	// RAM занято/свободно
+	cache.RAM = updateRAMDynamic(cache.RAM)
+
+	// Свободное место на разделах
+	cache.Disks = collectDisks()
+
+	// Статус сети (Up/Down, текущая скорость, IP)
+	cache.Network = updateNetworkDynamic(cache.Network)
+
+	// Аптайм
+	u, _ := host.Uptime()
+	cache.Host.Uptime = u
+
+	return cache, nil
 }
 
+// Парсинг Pretty Name версии дистрибутива
 func readOSRelease() string {
 	f, err := os.Open("/etc/os-release")
 	if err != nil {
