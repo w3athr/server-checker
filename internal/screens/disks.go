@@ -86,7 +86,7 @@ func parentBlockDevice(devPath string) string {
 
 func (d disksScreen) renderContent() string {
 	if len(d.data.BlockDevs) == 0 && len(d.data.Disks) == 0 {
-		return "Loading Disks data...\n\nPress ESC to return to menu."
+		return "Loading Disks data...\n\nPress Q to return to menu."
 	}
 
 	partsByParent := make(map[string][]models.DiskInfo)

@@ -340,7 +340,7 @@ func (m *multiError) Err() error {
 	for i, e := range m.errs {
 		sb.WriteString(fmt.Sprintf("  %d) %v\n", i+1, e))
 	}
-	return fmt.Errorf(sb.String())
+	return fmt.Errorf("%s", sb.String())
 }
 
 func generateDiagnosticsLogs(reportDir string) error {

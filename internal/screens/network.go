@@ -18,6 +18,7 @@ type networkScreen struct {
 	cursor   int
 	viewport viewport.Model
 	ready    bool
+	loaded   bool
 }
 
 func NewNetworkScreen() networkScreen {
@@ -48,6 +49,7 @@ func (n networkScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case TickMsg:
 		n.data = models.SystemInfo(msg)
+		n.loaded = true
 		n.viewport.SetContent(n.renderContent())
 
 	case tea.KeyMsg:
@@ -92,8 +94,12 @@ func (n networkScreen) View() string {
 }
 
 func (n networkScreen) renderContent() string {
-	if len(n.data.Network) == 0 {
+	if !n.loaded {
 		return "Loading Network data..."
+	}
+
+	if len(n.data.Network) == 0 {
+		return "No Ethernet interfaces detected on this system."
 	}
 
 	var s strings.Builder

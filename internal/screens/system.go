@@ -31,7 +31,7 @@ func (s systemScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (s systemScreen) View() string {
 	if s.data.Host.OS == "" {
-		return "Loading System data...\n\nPress ESC to return to menu."
+		return "Loading System data...\n\nPress Q to return to menu."
 	}
 
 	var b strings.Builder

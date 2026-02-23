@@ -31,7 +31,7 @@ func (c cpuScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (c cpuScreen) View() string {
 	if c.data.CPU.Model == "" {
-		return "Loading CPU data...\n\nPress ESC to return to menu."
+		return "Loading CPU data...\n\nPress Q to return to menu."
 	}
 
 	var s strings.Builder
