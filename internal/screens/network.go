@@ -83,10 +83,6 @@ func (n networkScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (n networkScreen) View() string {
-	if !n.ready {
-		return "Initializing Network..."
-	}
-
 	return fmt.Sprintf("%s\n%s\n%s",
 		"NIC information\n",
 		n.viewport.View(),

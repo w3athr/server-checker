@@ -14,6 +14,7 @@ type disksScreen struct {
 	data     models.SystemInfo
 	viewport viewport.Model
 	ready    bool
+	loaded   bool
 }
 
 func NewDisksScreen() disksScreen {
@@ -39,9 +40,11 @@ func (d disksScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			d.viewport.Width = msg.Width
 			d.viewport.Height = msg.Height - headerHeight - footerHeight
 		}
+		d.viewport.SetContent(d.renderContent())
 
 	case TickMsg:
 		d.data = models.SystemInfo(msg)
+		d.loaded = true
 		if d.ready {
 			d.viewport.SetContent(d.renderContent())
 		}
@@ -52,9 +55,6 @@ func (d disksScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (d disksScreen) View() string {
-	if !d.ready {
-		return "Initializing Disks..."
-	}
 	return fmt.Sprintf("%s\n%s\n%s",
 		"Disks information\n",
 		d.viewport.View(),
@@ -85,8 +85,8 @@ func parentBlockDevice(devPath string) string {
 }
 
 func (d disksScreen) renderContent() string {
-	if len(d.data.BlockDevs) == 0 && len(d.data.Disks) == 0 {
-		return "Loading Disks data...\n\nPress Q to return to menu."
+	if !d.loaded {
+		return "Loading Disks information..."
 	}
 
 	partsByParent := make(map[string][]models.DiskInfo)

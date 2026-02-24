@@ -14,6 +14,7 @@ type ramScreen struct {
 	viewport viewport.Model
 	ready    bool
 	lastSize tea.WindowSizeMsg
+	loaded   bool
 }
 
 func NewRAMScreen() ramScreen {
@@ -37,10 +38,12 @@ func (r ramScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			r.viewport.Width = msg.Width
 			r.viewport.Height = msg.Height - headerHeight - footerHeight
 		}
+		r.viewport.SetContent(r.renderContent())
 
 	case TickMsg:
 		r.data = models.SystemInfo(msg)
 		r.viewport.SetContent(r.renderContent())
+		r.loaded = true
 	}
 
 	r.viewport, cmd = r.viewport.Update(msg)
@@ -48,8 +51,8 @@ func (r ramScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (r ramScreen) renderContent() string {
-	if r.data.RAM.Total == 0 { // если данные еще не пришли
-		return "Loading RAM data...\n\nPress Q to return to menu."
+	if !r.loaded {
+		return "Loading RAM information..."
 	}
 
 	var s strings.Builder
@@ -73,9 +76,6 @@ func (r ramScreen) renderContent() string {
 }
 
 func (r ramScreen) View() string {
-	if !r.ready {
-		return "Initializing RAM..."
-	}
 	return fmt.Sprintf("%s\n%s\n%s",
 		"RAM information\n",
 		r.viewport.View(),

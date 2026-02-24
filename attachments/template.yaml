@@ -1,0 +1,38 @@
+# ==========================================
+# Custom Hardware Validation Template
+# Fill required minimum values for your system
+# ==========================================
+
+name: "My-Custom-Template"
+description: "Describe target hardware configuration here"
+
+cpu:
+  # Minimum required physical cores
+  min_cores: 0
+
+  # Minimum required logical threads
+  min_threads: 0
+
+  # Minimum required base frequency in GHz
+  min_speed_ghz: 0.0
+
+
+ram:
+  # Minimum total RAM in GB
+  min_total_gb: 0
+
+
+disks:
+  # Minimum number of physical drives
+  min_count: 0
+
+  # Minimum size of each drive in GB
+  min_size_gb: 0
+
+  # Expected type: HDD / SSD / NVMe
+  type: "SSD"
+
+
+network:
+  # Minimum number of total NIC ports
+  min_total_nics: 0
