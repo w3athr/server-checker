@@ -138,7 +138,13 @@ func generateReportCmd() tea.Msg {
 		return reportResultMsg{err: fmt.Errorf("failed to collect system data: %w", err)}
 	}
 
-	dirName := fmt.Sprintf("HealthCheck-%s", time.Now().Format("2006-01-02_15-04-05"))
+	sn := currentData.CPU.HardwareSN
+	if sn == "" || sn == "N/A" {
+		sn = "UnknownSN"
+	}
+	safeTmplName := strings.ReplaceAll(tmpl.Name, " ", "_")
+	dirName := fmt.Sprintf("%s_%s_%s", safeTmplName, time.Now().Format("2006-01-02_15-04-05"), sn)
+
 	absPath, err := filepath.Abs(dirName)
 	if err != nil {
 		return reportResultMsg{err: fmt.Errorf("failed to get absolute path: %w", err)}
@@ -172,25 +178,43 @@ func runHealthCheck(tmpl models.SystemTemplate, data models.SystemInfo) []checkR
 	cpuOk := data.CPU.Cores >= tmpl.CPU.MinCores && data.CPU.Speed >= tmpl.CPU.MinSpeed
 	results = append(results, checkResult{
 		Name:     "CPU Configuration",
-		Expected: fmt.Sprintf("%d Cores @ %.1fGHz", tmpl.CPU.MinCores, tmpl.CPU.MinSpeed),
+		Expected: fmt.Sprintf(">= %d Cores @ %.1fGHz", tmpl.CPU.MinCores, tmpl.CPU.MinSpeed),
 		Actual:   fmt.Sprintf("%d Cores @ %.1fGHz", data.CPU.Cores, data.CPU.Speed),
 		Passed:   cpuOk,
 	})
 
 	// 2. RAM
-	actualRAM := bytesToGBDec(data.RAM.Total)
-	ramOk := actualRAM >= float64(tmpl.RAM.MinTotalGB)-1.0 // допуск 1ГБ
+	var physicalRAMBytes uint64
+	if len(data.RAM.Sticks) > 0 {
+		// Если смогли прочитать физические плашки (запущено через sudo), суммируем их физический объем
+		for _, s := range data.RAM.Sticks {
+			physicalRAMBytes += s.Capacity
+		}
+	} else {
+		// Фолбек: если плашки не прочитались, берем то, что отдала ОС
+		physicalRAMBytes = data.RAM.Total
+	}
+	
+	// Используем нашу обновленную функцию bytesToGBDec (которая делит на 1024)
+	actualRAM := bytesToGBDec(physicalRAMBytes)
+	
+	// Проверяем, хватает ли памяти (с допуском в 1 ГБ на всякий случай)
+	ramOk := actualRAM >= float64(tmpl.RAM.MinTotalGB)-1.0 
+	
 	results = append(results, checkResult{
 		Name:     "Total RAM Capacity",
 		Expected: fmt.Sprintf(">= %d GB", tmpl.RAM.MinTotalGB),
-		Actual:   fmt.Sprintf("%.1f GB", actualRAM),
+		Actual:   fmt.Sprintf("%.1f GB", actualRAM), // Теперь здесь будет 16.0 GB
 		Passed:   ramOk,
 	})
 
 	// 3. Диски (считаем количество подходящих)
 	validDisks := 0
 	for _, bd := range data.BlockDevs {
-		if diskTypeMatches(bd.Type, tmpl.Disks.Type) && bytesToGBDec(bd.Size) >= float64(tmpl.Disks.MinSizeGB)-5.0 {
+		// Для дисков используем маркетинговый объем (base-1000)
+		marketingGB := float64(bd.Size) / 1000000000.0
+		
+		if diskTypeMatches(bd.Type, tmpl.Disks.Type) && marketingGB >= float64(tmpl.Disks.MinSizeGB)-5.0 {
 			validDisks++
 		}
 	}
@@ -394,7 +418,15 @@ func generateHTMLReport(dir string, tmpl models.SystemTemplate, data models.Syst
 		<table>
 			<tr><td class="spec-label">Hardware Vendor</td><td>{{if .Data.CPU.HardwareVendor}}{{.Data.CPU.HardwareVendor}}{{else}}Default string{{end}}</td></tr>
 			<tr><td class="spec-label">Product Model</td><td>{{if .Data.CPU.HardwareModel}}{{.Data.CPU.HardwareModel}}{{else}}Default string{{end}}</td></tr>
-			<tr><td class="spec-label">System Serial Number</td><td class="code">{{.Data.CPU.HardwareSN}}</td></tr>
+			<tr>
+				<td class="spec-label">System Serial Number</td>
+				<td class="code">
+					<div style="display: flex; justify-content: space-between; align-items: center;">
+						<span>{{.Data.CPU.HardwareSN}}</span>
+						<span style="color: #999; font-style: italic; font-size: 0.85em; font-weight: normal;">For CRM add '00' at the beginning</span>
+					</div>
+				</td>
+			</tr>
 			<tr><td class="spec-label">Motherboard</td><td>{{.Data.CPU.Motherboard}} (S/N: {{.Data.CPU.MotherboardSerial}})</td></tr>
 			<tr><td class="spec-label">Operating System</td><td>{{.Data.Host.OS}}</td></tr>
 			<tr><td class="spec-label">Kernel Version</td><td>{{.Data.Host.Kernel}}</td></tr>
@@ -408,7 +440,7 @@ func generateHTMLReport(dir string, tmpl models.SystemTemplate, data models.Syst
 		</table>
 
 		<h3>Memory (RAM)</h3>
-		<p style="margin-left: 5px;"><strong>Total Capacity:</strong> {{bytesToGB .Data.RAM.Total}} GB</p>
+		<p style="margin-left: 5px;"><strong>Total Capacity:</strong> {{physicalRAMGB .Data}} GB</p>
 		<table>
 			<thead>
 				<tr><th>Slot / Locator</th><th>Module Model</th><th>Capacity</th><th>Speed</th></tr>
@@ -447,7 +479,7 @@ func generateHTMLReport(dir string, tmpl models.SystemTemplate, data models.Syst
 		<h3>Storage Devices</h3>
 		<table>
 			<thead>
-				<tr><th>Device</th><th>Model / Firmware</th><th>Type</th><th>Size</th><th>Wear Level</th><th>Status</th></tr>
+				<tr><th>Device</th><th>Model / Firmware</th><th>Type</th><th>Size</th><th>Wear Level</th><th>Hours</th><th>Status</th></tr>
 			</thead>
 			<tbody>
 				{{range .Data.BlockDevs}}
@@ -455,8 +487,9 @@ func generateHTMLReport(dir string, tmpl models.SystemTemplate, data models.Syst
 					<td class="code">{{.Device}}</td>
 					<td>{{.Model}}</td>
 					<td>{{.Type}}</td>
-					<td>{{bytesToGB .Size}} GB</td>
+					<td>{{marketingGB .Size}} GB</td>
 					<td>{{if ge .Wear 0.0}}{{.Wear}}%{{else}}N/A{{end}}</td>
+					<td>{{.PowerOnHours}}</td>
 					<td style="font-weight:bold;">{{.Status}}</td>
 				</tr>
 				{{end}}
@@ -485,7 +518,22 @@ func generateHTMLReport(dir string, tmpl models.SystemTemplate, data models.Syst
 
 	t, err := template.New("report").Funcs(template.FuncMap{
 		"bytesToGB": func(b uint64) string {
-			return fmt.Sprintf("%.1f", float64(b)/1000/1000/1000)
+			return fmt.Sprintf("%.1f", float64(b)/1024/1024/1024)
+		},
+		"marketingGB": func(b uint64) string {
+			// Вывод маркетингового размера диска без дробной части (например, 512)
+			return fmt.Sprintf("%.0f", float64(b)/1000/1000/1000)
+		},
+		"physicalRAMGB": func(data models.SystemInfo) string {
+			// Суммарный размер физической оперативной памяти
+			if len(data.RAM.Sticks) > 0 {
+				var total uint64
+				for _, s := range data.RAM.Sticks {
+					total += s.Capacity
+				}
+				return fmt.Sprintf("%.1f", float64(total)/1024/1024/1024)
+			}
+			return fmt.Sprintf("%.1f", float64(data.RAM.Total)/1024/1024/1024)
 		},
 	}).Parse(htmlLayout)
 

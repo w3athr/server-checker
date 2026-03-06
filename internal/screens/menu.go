@@ -27,7 +27,8 @@ func NewMenuScreen() menu {
 			{text: "Network", onPress: func() tea.Model { return NewNetworkScreen() }},
 			{text: "Disks", onPress: func() tea.Model { return NewDisksScreen() }},
 			{text: "Report", onPress: func() tea.Model { return NewReportMenuScreen() }},
-		},
+			{text: "Reboot", onPress: func() tea.Model { return NewPowerActionScreen(ActionReboot) }},
+			{text: "Shutdown", onPress: func() tea.Model { return NewPowerActionScreen(ActionShutdown) }},		},
 	}
 }
 

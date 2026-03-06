@@ -1,6 +1,6 @@
 module server-checker
 
-go 1.24.2
+go 1.24.4
 
 require (
 	github.com/anatol/smart.go v0.0.0-20241126061019-f03d79b340d2

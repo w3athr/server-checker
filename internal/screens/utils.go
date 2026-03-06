@@ -49,9 +49,9 @@ func formatBytes(bytes uint64) string {
 }
 
 func gbToBytesDec(gb int) uint64 {
-	return uint64(gb) * 1000 * 1000 * 1000
+	return uint64(gb) * 1024 * 1024 * 1024
 }
 
 func bytesToGBDec(b uint64) float64 {
-	return float64(b) / 1000 / 1000 / 1000
+	return float64(b) / 1024 / 1024 / 1024
 }
